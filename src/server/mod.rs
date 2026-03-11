@@ -1,3 +1,3 @@
-mod router;
+pub mod router;
 
 pub use router::create_server;
