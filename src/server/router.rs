@@ -17,6 +17,11 @@ pub async fn create_server(config: Config) -> Result<(), Box<dyn std::error::Err
         .route("/health", get(handlers::health_check))
         .route("/v1/chat/completions", post(handlers::chat_completions))
         .route("/v1/responses", post(handlers::responses))
+        // Zhipu direct endpoint - bypasses transform layer
+        .route(
+            "/v1/providers/zhipu/chat/completions",
+            post(handlers::zhipu_chat_completions),
+        )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);

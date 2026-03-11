@@ -207,6 +207,58 @@ pub async fn health_check() -> &'static str {
     "OK"
 }
 
+/// Zhipu direct endpoint - bypasses transform layer
+/// POST /v1/providers/zhipu/chat/completions
+///
+/// This endpoint directly proxies to Zhipu AI without any format transformation.
+/// Useful for clients that want native GLM model access.
+pub async fn zhipu_chat_completions(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ChatRequest>,
+) -> impl IntoResponse {
+    // Get Zhipu provider directly
+    let provider = match state.zhipu_provider.clone() {
+        Some(p) => p,
+        None => {
+            return Error::Provider("Zhipu provider not configured".to_string()).into_response()
+        }
+    };
+
+    let stream = body.stream.unwrap_or(false);
+
+    if stream {
+        // Handle streaming
+        match provider.chat_streaming(body).await {
+            Ok(streaming) => {
+                if !streaming.is_success() {
+                    return Error::Provider(format!(
+                        "Streaming request failed with status: {}",
+                        streaming.status
+                    ))
+                    .into_response();
+                }
+
+                // Pass through streaming chunks without transformation
+                let stream = stream::iter(streaming.chunks.into_iter().map(|chunk| {
+                    Ok::<_, std::convert::Infallible>(
+                        Event::default()
+                            .data(serde_json::to_string(&chunk).unwrap_or_default()),
+                    )
+                }));
+
+                Sse::new(stream).into_response()
+            }
+            Err(e) => Error::Provider(e.to_string()).into_response(),
+        }
+    } else {
+        // Handle non-streaming - direct pass-through
+        match provider.chat(body).await {
+            Ok(chat_response) => Json(chat_response).into_response(),
+            Err(e) => Error::Provider(e.to_string()).into_response(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
