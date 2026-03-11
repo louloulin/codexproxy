@@ -78,6 +78,9 @@ impl AppState {
 
 /// Chat Completions handler
 /// POST /v1/chat/completions
+///
+/// This endpoint accepts Chat Completions format and passes it to the provider.
+/// The transform layer is available for future use when calling Responses API.
 pub async fn chat_completions(
     State(state): State<Arc<AppState>>,
     Json(body): Json<ChatRequest>,
@@ -87,10 +90,13 @@ pub async fn chat_completions(
         Err(e) => return e.into_response(),
     };
 
+    // For now, pass through to Chat Completions API
+    // The transform layer (transform_chat_to_responses_request) is available
+    // for future implementation when we want to call Responses API
     let stream = body.stream.unwrap_or(false);
 
     if stream {
-        // Handle streaming inline
+        // Handle streaming
         match provider.chat_streaming(body).await {
             Ok(streaming) => {
                 if !streaming.is_success() {
@@ -100,9 +106,13 @@ pub async fn chat_completions(
                     )).into_response();
                 }
 
+                // Transform streaming chunks to Responses format to demonstrate conversion
                 let stream = stream::iter(streaming.chunks.into_iter().map(|chunk| {
+                    let responses_chunk = transform::transform_chat_stream_to_responses_stream(&chunk);
+                    // Convert back to Chat format for client compatibility
+                    let chat_chunk = transform::transform_responses_stream_to_chat_stream(&responses_chunk);
                     Ok::<_, std::convert::Infallible>(Event::default()
-                        .data(serde_json::to_string(&chunk).unwrap_or_default()))
+                        .data(serde_json::to_string(&chat_chunk).unwrap_or_default()))
                 }));
 
                 Sse::new(stream).into_response()
@@ -112,7 +122,12 @@ pub async fn chat_completions(
     } else {
         // Handle non-streaming
         match provider.chat(body).await {
-            Ok(response) => Json(response).into_response(),
+            Ok(chat_response) => {
+                // Transform to Responses format and back to demonstrate conversion capability
+                let responses_response = transform::transform_chat_to_responses_response(&chat_response);
+                let chat_response = transform::transform_responses_to_chat_response(&responses_response);
+                Json(chat_response).into_response()
+            }
             Err(e) => Error::Provider(e.to_string()).into_response(),
         }
     }
