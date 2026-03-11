@@ -1013,8 +1013,8 @@ async fn test_chat_completions_streaming_basic() {
     // Should accept streaming request
     assert!(response.status() != StatusCode::BAD_REQUEST);
 
-    // Check for SSE content type
-    let content_type = response.headers().get("content-type");
+    // Check for SSE content type (prefixed with _ because it's not used in mock tests)
+    let _content_type = response.headers().get("content-type");
     // Note: In mock tests without real providers, this may not be set
     // In real scenarios, it should be "text/event-stream"
     assert!(response.status() != StatusCode::NOT_FOUND);
