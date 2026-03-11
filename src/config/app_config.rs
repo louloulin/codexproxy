@@ -136,6 +136,7 @@ impl Default for Config {
 }
 
 impl ProvidersConfig {
+    #[allow(dead_code)]
     pub fn get_provider(&self, name: &str) -> Option<&ProviderConfig> {
         match name {
             "openai" => Some(&self.openai),

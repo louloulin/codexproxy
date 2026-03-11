@@ -9,12 +9,8 @@ use serde_json::json;
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
-            Error::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             Error::Request(e) => (StatusCode::BAD_REQUEST, &e.to_string()),
             Error::Provider(msg) => (StatusCode::BAD_GATEWAY, msg),
-            Error::Transform(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            Error::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
-            Error::Streaming(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             Error::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
             Error::Json(e) => (StatusCode::BAD_REQUEST, &e.to_string()),
             Error::Yaml(e) => (StatusCode::BAD_REQUEST, &e.to_string()),

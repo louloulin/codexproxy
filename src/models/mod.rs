@@ -11,4 +11,4 @@ pub mod response;
 pub mod streaming;
 
 // Re-export commonly used types
-pub use chat::{ChatRequest, ChatResponse, Message};
+pub use chat::{ChatRequest, ChatResponse};

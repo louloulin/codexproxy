@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// This is sent as SSE data for streaming responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct ChatCompletionChunk {
     /// Unique identifier for this chunk
     pub id: String,
@@ -28,6 +29,7 @@ pub struct ChatCompletionChunk {
 /// Streaming choice
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct StreamingChoice {
     /// Index of this choice
     pub index: u32,
@@ -44,6 +46,7 @@ pub struct StreamingChoice {
 /// Delta content in streaming response
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct Delta {
     /// Role of the message
     #[serde(default)]
@@ -61,6 +64,7 @@ pub struct Delta {
 /// Tool call in streaming response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct ToolCall {
     /// ID of this tool call
     pub id: String,
@@ -75,6 +79,7 @@ pub struct ToolCall {
 
 /// Function call details
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct FunctionCall {
     /// Name of the function
     pub name: String,
@@ -86,6 +91,7 @@ pub struct FunctionCall {
 /// Usage information for streaming
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct Usage {
     /// Tokens in the prompt
     #[serde(default)]
@@ -102,6 +108,7 @@ pub struct Usage {
 
 /// SSE event types for streaming
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum SseEvent {
     /// Chat completion chunk
     ChatCompletion(ChatCompletionChunk),
@@ -113,6 +120,7 @@ pub enum SseEvent {
 
 impl SseEvent {
     /// Convert to SSE format string
+    #[allow(dead_code)]
     pub fn to_sse(&self) -> String {
         match self {
             SseEvent::ChatCompletion(chunk) => {
@@ -127,6 +135,7 @@ impl SseEvent {
 }
 
 /// Helper to build streaming response
+#[allow(dead_code)]
 pub struct StreamingResponseBuilder {
     id: String,
     model: String,
@@ -134,6 +143,7 @@ pub struct StreamingResponseBuilder {
 }
 
 impl StreamingResponseBuilder {
+    #[allow(dead_code)]
     pub fn new(model: String) -> Self {
         Self {
             id: format!("chatcmpl-{}", uuid::Uuid::new_v4()),
@@ -145,6 +155,7 @@ impl StreamingResponseBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn build_chunk(&self, content: String, finish_reason: Option<String>) -> ChatCompletionChunk {
         ChatCompletionChunk {
             id: self.id.clone(),

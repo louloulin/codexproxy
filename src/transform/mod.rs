@@ -15,17 +15,21 @@
 //! - [`transform_chat_stream_to_responses_stream`] - Convert Chat streaming to Responses streaming
 //! - [`transform_responses_stream_to_chat_stream`] - Convert Responses streaming to Chat streaming
 
-use crate::models::chat::{ChatRequest, ChatResponse, Choice, Message as ChatMessage, Usage as ChatUsage};
+use crate::models::chat::{
+    ChatCompletionChunk, ChatRequest, ChatResponse, Choice,
+    Message as ChatMessage, Usage as ChatUsage, Delta as ChatDelta,
+    StreamingChoice as ChatStreamingChoice, ToolCall as ChatToolCall,
+};
 use crate::models::response::{
     ContentBlock, InputText, Item, MessageItem, OutputItem,
     ResponsesRequest, ResponsesResponse, ToolCallOutput, FunctionCallOutputFunction,
     Usage as ResponsesUsage,
 };
-use crate::models::streaming::{ChatCompletionChunk, Delta, StreamingChoice};
 use crate::models::response::StreamOutputItem;
 use crate::models::response::ResponsesStreamChunk;
 
 /// Transform Chat Completions Request → Responses API Request
+#[allow(dead_code)]
 pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesRequest {
     let input: Vec<Item> = chat_req
         .messages
@@ -219,6 +223,7 @@ pub fn transform_chat_to_responses_response(chat_resp: &ChatResponse) -> Respons
 }
 
 /// Transform Responses API Response → Chat Completions Response
+#[allow(dead_code)]
 pub fn transform_responses_to_chat_response(responses_resp: &ResponsesResponse) -> ChatResponse {
     let choices: Vec<Choice> = responses_resp
         .output
@@ -290,13 +295,14 @@ pub fn transform_chat_stream_to_responses_stream(
     let output: Vec<StreamOutputItem> = chat_chunk
         .choices
         .iter()
-        .map(|choice| {
-            StreamOutputItem::Message(crate::models::response::StreamMessageDelta {
+        .filter_map(|choice| {
+            let delta = choice.delta.as_ref()?;
+            Some(StreamOutputItem::Message(crate::models::response::StreamMessageDelta {
                 index: choice.index,
                 delta: Some(crate::models::response::MessageDelta {
-                    role: choice.delta.role.clone(),
-                    content: choice.delta.content.clone(),
-                    tool_calls: choice.delta.tool_calls.as_ref().map(|calls| {
+                    role: delta.role.clone(),
+                    content: delta.content.clone(),
+                    tool_calls: delta.tool_calls.as_ref().map(|calls| {
                         calls.iter().map(|tc| {
                             ToolCallOutput {
                                 id: tc.id.clone(),
@@ -310,9 +316,12 @@ pub fn transform_chat_stream_to_responses_stream(
                     }),
                 }),
                 status: choice.finish_reason.clone(),
-            })
+            }))
         })
         .collect();
+
+    // For streaming chunks, usage is typically None until the final chunk
+    let usage = None;
 
     ResponsesStreamChunk {
         id: chat_chunk.id.clone(),
@@ -320,40 +329,42 @@ pub fn transform_chat_stream_to_responses_stream(
         created: chat_chunk.created,
         model: chat_chunk.model.clone(),
         output,
-        usage: None,
+        usage,
     }
 }
 
 /// Transform Responses API streaming chunk → Chat Completions streaming chunk
+#[allow(dead_code)]
 pub fn transform_responses_stream_to_chat_stream(
     responses_chunk: &ResponsesStreamChunk,
 ) -> ChatCompletionChunk {
-    let choices: Vec<StreamingChoice> = responses_chunk
+    let choices: Vec<ChatStreamingChoice> = responses_chunk
         .output
         .iter()
         .filter_map(|item| {
             match item {
                 StreamOutputItem::Message(msg) => {
                     let delta = msg.delta.as_ref()?;
-                    Some(StreamingChoice {
+                    Some(ChatStreamingChoice {
                         index: msg.index,
-                        delta: Delta {
+                        delta: Some(ChatDelta {
                             role: delta.role.clone(),
                             content: delta.content.clone(),
                             tool_calls: delta.tool_calls.as_ref().map(|calls| {
                                 calls.iter().map(|tc| {
-                                    crate::models::streaming::ToolCall {
+                                    ChatToolCall {
                                         id: tc.id.clone(),
                                         call_type: tc.call_type.clone(),
-                                        function: crate::models::streaming::FunctionCall {
+                                        function: crate::models::chat::FunctionCall {
                                             name: tc.function.name.clone(),
                                             arguments: tc.function.arguments.clone(),
                                         },
                                     }
                                 }).collect()
                             }),
-                        },
+                        }),
                         finish_reason: msg.status.clone(),
+                        logprobs: None,
                     })
                 }
                 _ => None,
@@ -361,12 +372,20 @@ pub fn transform_responses_stream_to_chat_stream(
         })
         .collect();
 
+    // Convert usage from response format to chat format
+    let usage = responses_chunk.usage.as_ref().map(|u| ChatUsage {
+        prompt_tokens: u.input_tokens,
+        completion_tokens: u.output_tokens,
+        total_tokens: u.total_tokens,
+    });
+
     ChatCompletionChunk {
         id: responses_chunk.id.clone(),
         object: "chat.completion.chunk".to_string(),
         created: responses_chunk.created,
         model: responses_chunk.model.clone(),
         choices,
+        usage,
     }
 }
 

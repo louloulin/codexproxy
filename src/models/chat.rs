@@ -366,7 +366,7 @@ pub struct StreamingChoice {
 }
 
 /// Delta content in streaming response
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Delta {
     /// The role of the message author
@@ -380,14 +380,4 @@ pub struct Delta {
     /// Tool calls that the model wants to make
     #[serde(default)]
     pub tool_calls: Option<Vec<ToolCall>>,
-}
-
-impl Default for Delta {
-    fn default() -> Self {
-        Self {
-            role: None,
-            content: None,
-            tool_calls: None,
-        }
-    }
 }

@@ -37,6 +37,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # 时间
 chrono = { version = "0.4", features = ["serde"] }
 
+# 异步流
+futures = "0.3"
+
 # 唯一 ID
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
