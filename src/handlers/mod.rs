@@ -241,8 +241,7 @@ pub async fn zhipu_chat_completions(
                 // Pass through streaming chunks without transformation
                 let stream = stream::iter(streaming.chunks.into_iter().map(|chunk| {
                     Ok::<_, std::convert::Infallible>(
-                        Event::default()
-                            .data(serde_json::to_string(&chunk).unwrap_or_default()),
+                        Event::default().data(serde_json::to_string(&chunk).unwrap_or_default()),
                     )
                 }));
 

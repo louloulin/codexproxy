@@ -8,11 +8,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
-pub async fn create_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
-    // Create application state with providers
-    let state = Arc::new(AppState::new(config.clone()));
-
-    let app = Router::new()
+/// Create the application router with all routes configured
+pub fn create_router(state: Arc<AppState>) -> Router {
+    Router::new()
         .route("/", get(handlers::health_check))
         .route("/health", get(handlers::health_check))
         .route("/v1/chat/completions", post(handlers::chat_completions))
@@ -24,7 +22,14 @@ pub async fn create_server(config: Config) -> Result<(), Box<dyn std::error::Err
         )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state)
+}
+
+pub async fn create_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+    // Create application state with providers
+    let state = Arc::new(AppState::new(config.clone()));
+
+    let app = create_router(state);
 
     let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
     tracing::info!("Server listening on {}", addr);

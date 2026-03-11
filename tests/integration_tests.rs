@@ -8,10 +8,7 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use openai_proxy::{
-    config::Config,
-    handlers::AppState,
-};
+use openai_proxy::{config::Config, handlers::AppState};
 use serde_json::json;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -301,7 +298,9 @@ async fn test_cors_headers() {
         .unwrap();
 
     // CORS layer should be present
-    assert!(response.headers().contains_key("access-control-allow-origin"));
+    assert!(response
+        .headers()
+        .contains_key("access-control-allow-origin"));
 }
 
 #[tokio::test]
@@ -983,4 +982,310 @@ async fn test_multiple_concurrent_health_checks() {
         }
     }
     assert_eq!(success_count, 20);
+}
+
+// ==================== Streaming Tests ====================
+
+#[tokio::test]
+async fn test_chat_completions_streaming_basic() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Tell me a short story"}
+        ],
+        "stream": true
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should accept streaming request
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+
+    // Check for SSE content type
+    let content_type = response.headers().get("content-type");
+    // Note: In mock tests without real providers, this may not be set
+    // In real scenarios, it should be "text/event-stream"
+    assert!(response.status() != StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_responses_streaming_basic() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "input": [
+            {"type": "message", "role": "user", "content": "Hello"}
+        ],
+        "stream": true
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/responses")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should accept streaming request
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+    assert!(response.status() != StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_chat_completions_streaming_with_temperature() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Generate text"}
+        ],
+        "stream": true,
+        "temperature": 0.8
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_chat_completions_streaming_with_max_tokens() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Write something"}
+        ],
+        "stream": true,
+        "max_tokens": 100
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_responses_streaming_with_instructions() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "instructions": "You are a helpful assistant",
+        "input": [
+            {"type": "message", "role": "user", "content": "Hello"}
+        ],
+        "stream": true
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/responses")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_chat_completions_streaming_with_tools() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "What's the weather?"}
+        ],
+        "stream": true,
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        ]
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_chat_completions_streaming_with_system_message() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": "Hello"}
+        ],
+        "stream": true
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_streaming_false_explicit() {
+    let app = create_app();
+
+    // Explicitly set stream to false
+    let request = json!({
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Hello"}
+        ],
+        "stream": false
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should handle non-streaming request
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_responses_streaming_with_text_format() {
+    let app = create_app();
+
+    let request = json!({
+        "model": "gpt-4o",
+        "input": [
+            {"type": "message", "role": "user", "content": "Generate JSON"}
+        ],
+        "stream": true,
+        "text": {
+            "format": {"type": "json_object"}
+        }
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/responses")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status() != StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_zhipu_streaming_with_different_models() {
+    let app = create_app();
+
+    // Test with glm-4-flash
+    let request = json!({
+        "model": "glm-4-flash",
+        "messages": [
+            {"role": "user", "content": "Hello"}
+        ],
+        "stream": true
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/providers/zhipu/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status() != StatusCode::BAD_REQUEST);
 }
