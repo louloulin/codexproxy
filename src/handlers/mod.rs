@@ -7,7 +7,10 @@
 
 use axum::{
     extract::State,
-    response::{sse::{Event, Sse}, IntoResponse},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse,
+    },
     Json,
 };
 use futures::stream;
@@ -67,9 +70,13 @@ impl AppState {
     /// Get provider by name
     fn get_provider_by_name(&self, name: &str) -> Result<ProviderType, Error> {
         match name {
-            "openai" => self.openai_provider.clone()
+            "openai" => self
+                .openai_provider
+                .clone()
                 .ok_or_else(|| Error::Provider("OpenAI provider not configured".to_string())),
-            "zhipu" => self.zhipu_provider.clone()
+            "zhipu" => self
+                .zhipu_provider
+                .clone()
                 .ok_or_else(|| Error::Provider("Zhipu provider not configured".to_string())),
             _ => Err(Error::Provider(format!("Unknown provider: {}", name))),
         }
@@ -103,16 +110,21 @@ pub async fn chat_completions(
                     return Error::Provider(format!(
                         "Streaming request failed with status: {}",
                         streaming.status
-                    )).into_response();
+                    ))
+                    .into_response();
                 }
 
                 // Transform streaming chunks to Responses format to demonstrate conversion
                 let stream = stream::iter(streaming.chunks.into_iter().map(|chunk| {
-                    let responses_chunk = transform::transform_chat_stream_to_responses_stream(&chunk);
+                    let responses_chunk =
+                        transform::transform_chat_stream_to_responses_stream(&chunk);
                     // Convert back to Chat format for client compatibility
-                    let chat_chunk = transform::transform_responses_stream_to_chat_stream(&responses_chunk);
-                    Ok::<_, std::convert::Infallible>(Event::default()
-                        .data(serde_json::to_string(&chat_chunk).unwrap_or_default()))
+                    let chat_chunk =
+                        transform::transform_responses_stream_to_chat_stream(&responses_chunk);
+                    Ok::<_, std::convert::Infallible>(
+                        Event::default()
+                            .data(serde_json::to_string(&chat_chunk).unwrap_or_default()),
+                    )
                 }));
 
                 Sse::new(stream).into_response()
@@ -124,8 +136,10 @@ pub async fn chat_completions(
         match provider.chat(body).await {
             Ok(chat_response) => {
                 // Transform to Responses format and back to demonstrate conversion capability
-                let responses_response = transform::transform_chat_to_responses_response(&chat_response);
-                let chat_response = transform::transform_responses_to_chat_response(&responses_response);
+                let responses_response =
+                    transform::transform_chat_to_responses_response(&chat_response);
+                let chat_response =
+                    transform::transform_responses_to_chat_response(&responses_response);
                 Json(chat_response).into_response()
             }
             Err(e) => Error::Provider(e.to_string()).into_response(),
@@ -156,13 +170,17 @@ pub async fn responses(
                     return Error::Provider(format!(
                         "Streaming request failed with status: {}",
                         streaming.status
-                    )).into_response();
+                    ))
+                    .into_response();
                 }
 
                 let stream = stream::iter(streaming.chunks.into_iter().map(|chunk| {
-                    let responses_chunk = transform::transform_chat_stream_to_responses_stream(&chunk);
-                    Ok::<_, std::convert::Infallible>(Event::default()
-                        .data(serde_json::to_string(&responses_chunk).unwrap_or_default()))
+                    let responses_chunk =
+                        transform::transform_chat_stream_to_responses_stream(&chunk);
+                    Ok::<_, std::convert::Infallible>(
+                        Event::default()
+                            .data(serde_json::to_string(&responses_chunk).unwrap_or_default()),
+                    )
                 }));
 
                 Sse::new(stream).into_response()
@@ -175,7 +193,8 @@ pub async fn responses(
 
         match provider.chat(chat_request).await {
             Ok(chat_response) => {
-                let responses_response = transform::transform_chat_to_responses_response(&chat_response);
+                let responses_response =
+                    transform::transform_chat_to_responses_response(&chat_response);
                 Json(responses_response).into_response()
             }
             Err(e) => Error::Provider(e.to_string()).into_response(),
@@ -191,7 +210,9 @@ pub async fn health_check() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ProviderConfig, ProvidersConfig, RoutingConfig, ServerConfig, LoggingConfig};
+    use crate::config::{
+        LoggingConfig, ProviderConfig, ProvidersConfig, RoutingConfig, ServerConfig,
+    };
     use std::collections::HashMap;
 
     fn create_test_config() -> Config {

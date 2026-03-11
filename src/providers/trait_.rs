@@ -25,16 +25,10 @@ pub trait LLMProvider: Send + Sync {
     fn client(&self) -> &reqwest::Client;
 
     /// Chat completions (non-streaming)
-    async fn chat(
-        &self,
-        request: ChatRequest,
-    ) -> Result<ChatResponse, ProviderError>;
+    async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError>;
 
     /// Chat completions (streaming) - returns iterator of chunks
-    async fn chat_streaming(
-        &self,
-        request: ChatRequest,
-    ) -> Result<StreamingChat, ProviderError>;
+    async fn chat_streaming(&self, request: ChatRequest) -> Result<StreamingChat, ProviderError>;
 
     /// List available models (optional, returns empty vec if not supported)
     async fn list_models(&self) -> Result<Vec<String>, ProviderError> {

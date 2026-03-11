@@ -16,17 +16,16 @@
 //! - [`transform_responses_stream_to_chat_stream`] - Convert Responses streaming to Chat streaming
 
 use crate::models::chat::{
-    ChatCompletionChunk, ChatRequest, ChatResponse, Choice,
-    Message as ChatMessage, Usage as ChatUsage, Delta as ChatDelta,
-    StreamingChoice as ChatStreamingChoice, ToolCall as ChatToolCall,
+    ChatCompletionChunk, ChatRequest, ChatResponse, Choice, Delta as ChatDelta,
+    Message as ChatMessage, StreamingChoice as ChatStreamingChoice, ToolCall as ChatToolCall,
+    Usage as ChatUsage,
 };
-use crate::models::response::{
-    ContentBlock, InputText, Item, MessageItem, OutputItem,
-    ResponsesRequest, ResponsesResponse, ToolCallOutput, FunctionCallOutputFunction,
-    Usage as ResponsesUsage,
-};
-use crate::models::response::StreamOutputItem;
 use crate::models::response::ResponsesStreamChunk;
+use crate::models::response::StreamOutputItem;
+use crate::models::response::{
+    ContentBlock, FunctionCallOutputFunction, InputText, Item, MessageItem, OutputItem,
+    ResponsesRequest, ResponsesResponse, ToolCallOutput, Usage as ResponsesUsage,
+};
 
 /// Transform Chat Completions Request → Responses API Request
 #[allow(dead_code)]
@@ -44,19 +43,24 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
         })
         .collect();
 
-    let tools = chat_req.tools.as_ref().map(|tools| {
-        tools.iter().map(|t| {
-            crate::models::response::Tool {
-                tool_type: t.tool_type.clone(),
-                function: crate::models::response::FunctionDefinition {
-                    name: t.function.name.clone(),
-                    description: t.function.description.clone(),
-                    parameters: t.function.parameters.clone(),
-                    strict: None,
-                },
-            }
-        }).collect()
-    }).unwrap_or_default();
+    let tools = chat_req
+        .tools
+        .as_ref()
+        .map(|tools| {
+            tools
+                .iter()
+                .map(|t| crate::models::response::Tool {
+                    tool_type: t.tool_type.clone(),
+                    function: crate::models::response::FunctionDefinition {
+                        name: t.function.name.clone(),
+                        description: t.function.description.clone(),
+                        parameters: t.function.parameters.clone(),
+                        strict: None,
+                    },
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     ResponsesRequest {
         model: chat_req.model.clone(),
@@ -67,15 +71,22 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
         top_p: chat_req.top_p,
         max_tokens: chat_req.max_tokens,
         stream: chat_req.stream,
-        text: chat_req.response_format.as_ref().map(|rf| {
-            crate::models::response::TextFormat {
+        text: chat_req
+            .response_format
+            .as_ref()
+            .map(|rf| crate::models::response::TextFormat {
                 format: Some(match rf {
-                    crate::models::chat::ResponseFormat::Text => crate::models::response::TextFormatType::Text,
-                    crate::models::chat::ResponseFormat::JsonObject => crate::models::response::TextFormatType::JsonObject,
-                    crate::models::chat::ResponseFormat::JsonSchema => crate::models::response::TextFormatType::JsonSchema,
+                    crate::models::chat::ResponseFormat::Text => {
+                        crate::models::response::TextFormatType::Text
+                    }
+                    crate::models::chat::ResponseFormat::JsonObject => {
+                        crate::models::response::TextFormatType::JsonObject
+                    }
+                    crate::models::chat::ResponseFormat::JsonSchema => {
+                        crate::models::response::TextFormatType::JsonSchema
+                    }
                 }),
-            }
-        }),
+            }),
         structured_output: None,
         store: None,
         metadata: None,
@@ -92,60 +103,64 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
     let messages: Vec<ChatMessage> = responses_req
         .input
         .iter()
-        .filter_map(|item| {
-            match item {
-                Item::Message(msg) => Some(ChatMessage {
-                    role: msg.role.clone(),
-                    content: msg.content.iter().find_map(|c| {
-                        match c {
-                            ContentBlock::InputText(text) => Some(text.text.clone()),
-                            _ => None,
-                        }
-                    }),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
+        .filter_map(|item| match item {
+            Item::Message(msg) => Some(ChatMessage {
+                role: msg.role.clone(),
+                content: msg.content.iter().find_map(|c| match c {
+                    ContentBlock::InputText(text) => Some(text.text.clone()),
+                    _ => None,
                 }),
-                Item::FunctionCall(func) => Some(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: None,
-                    name: None,
-                    tool_calls: Some(vec![crate::models::chat::ToolCall {
-                        id: func.call_id.clone(),
-                        call_type: "function".to_string(),
-                        function: crate::models::chat::FunctionCall {
-                            name: func.name.clone(),
-                            arguments: func.arguments.clone(),
-                        },
-                    }]),
-                    tool_call_id: None,
-                }),
-                _ => None,
-            }
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }),
+            Item::FunctionCall(func) => Some(ChatMessage {
+                role: "assistant".to_string(),
+                content: None,
+                name: None,
+                tool_calls: Some(vec![crate::models::chat::ToolCall {
+                    id: func.call_id.clone(),
+                    call_type: "function".to_string(),
+                    function: crate::models::chat::FunctionCall {
+                        name: func.name.clone(),
+                        arguments: func.arguments.clone(),
+                    },
+                }]),
+                tool_call_id: None,
+            }),
+            _ => None,
         })
         .collect();
 
     let tools = if responses_req.tools.is_empty() {
         None
     } else {
-        Some(responses_req.tools.iter().map(|t| {
-            crate::models::chat::Tool {
-                tool_type: t.tool_type.clone(),
-                function: crate::models::chat::FunctionDefinition {
-                    name: t.function.name.clone(),
-                    description: t.function.description.clone(),
-                    parameters: t.function.parameters.clone(),
-                },
-            }
-        }).collect())
+        Some(
+            responses_req
+                .tools
+                .iter()
+                .map(|t| crate::models::chat::Tool {
+                    tool_type: t.tool_type.clone(),
+                    function: crate::models::chat::FunctionDefinition {
+                        name: t.function.name.clone(),
+                        description: t.function.description.clone(),
+                        parameters: t.function.parameters.clone(),
+                    },
+                })
+                .collect(),
+        )
     };
 
     let response_format = responses_req.text.as_ref().and_then(|t| {
-        t.format.as_ref().map(|f| {
-            match f {
-                crate::models::response::TextFormatType::Text => crate::models::chat::ResponseFormat::Text,
-                crate::models::response::TextFormatType::JsonObject => crate::models::chat::ResponseFormat::JsonObject,
-                crate::models::response::TextFormatType::JsonSchema => crate::models::chat::ResponseFormat::JsonSchema,
+        t.format.as_ref().map(|f| match f {
+            crate::models::response::TextFormatType::Text => {
+                crate::models::chat::ResponseFormat::Text
+            }
+            crate::models::response::TextFormatType::JsonObject => {
+                crate::models::chat::ResponseFormat::JsonObject
+            }
+            crate::models::response::TextFormatType::JsonSchema => {
+                crate::models::chat::ResponseFormat::JsonSchema
             }
         })
     });
@@ -176,32 +191,40 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
 
 /// Transform Chat Completions Response → Responses API Response
 pub fn transform_chat_to_responses_response(chat_resp: &ChatResponse) -> ResponsesResponse {
-    let output: Vec<OutputItem> = chat_resp.choices.iter().enumerate().map(|(idx, choice)| {
-        let content_text = choice.message.content.clone().unwrap_or_default();
-        let tool_calls = choice.message.tool_calls.as_ref().map(|calls| {
-            calls.iter().map(|tc| {
-                ToolCallOutput {
-                    id: tc.id.clone(),
-                    call_type: tc.call_type.clone(),
-                    function: FunctionCallOutputFunction {
-                        name: tc.function.name.clone(),
-                        arguments: tc.function.arguments.clone(),
-                    },
-                }
-            }).collect()
-        });
+    let output: Vec<OutputItem> = chat_resp
+        .choices
+        .iter()
+        .enumerate()
+        .map(|(idx, choice)| {
+            let content_text = choice.message.content.clone().unwrap_or_default();
+            let tool_calls = choice.message.tool_calls.as_ref().map(|calls| {
+                calls
+                    .iter()
+                    .map(|tc| ToolCallOutput {
+                        id: tc.id.clone(),
+                        call_type: tc.call_type.clone(),
+                        function: FunctionCallOutputFunction {
+                            name: tc.function.name.clone(),
+                            arguments: tc.function.arguments.clone(),
+                        },
+                    })
+                    .collect()
+            });
 
-        OutputItem::Message(crate::models::response::MessageOutput {
-            index: idx as u32,
-            role: choice.message.role.clone(),
-            content: vec![ContentBlock::OutputText(crate::models::response::OutputText {
-                text: content_text,
-                annotations: None,
-            })],
-            status: choice.finish_reason.clone(),
-            tool_calls,
+            OutputItem::Message(crate::models::response::MessageOutput {
+                index: idx as u32,
+                role: choice.message.role.clone(),
+                content: vec![ContentBlock::OutputText(
+                    crate::models::response::OutputText {
+                        text: content_text,
+                        annotations: None,
+                    },
+                )],
+                status: choice.finish_reason.clone(),
+                tool_calls,
+            })
         })
-    }).collect();
+        .collect();
 
     let usage = chat_resp.usage.as_ref().map(|u| ResponsesUsage {
         input_tokens: u.prompt_tokens,
@@ -228,44 +251,41 @@ pub fn transform_responses_to_chat_response(responses_resp: &ResponsesResponse) 
     let choices: Vec<Choice> = responses_resp
         .output
         .iter()
-        .filter_map(|item| {
-            match item {
-                OutputItem::Message(msg) => {
-                    let content = msg.content.iter().find_map(|c| {
-                        match c {
-                            ContentBlock::OutputText(text) => Some(text.text.clone()),
-                            _ => None,
-                        }
-                    });
+        .filter_map(|item| match item {
+            OutputItem::Message(msg) => {
+                let content = msg.content.iter().find_map(|c| match c {
+                    ContentBlock::OutputText(text) => Some(text.text.clone()),
+                    _ => None,
+                });
 
-                    let tool_calls = msg.tool_calls.as_ref().map(|calls| {
-                        calls.iter().map(|tc| {
-                            crate::models::chat::ToolCall {
-                                id: tc.id.clone(),
-                                call_type: tc.call_type.clone(),
-                                function: crate::models::chat::FunctionCall {
-                                    name: tc.function.name.clone(),
-                                    arguments: tc.function.arguments.clone(),
-                                },
-                            }
-                        }).collect()
-                    });
+                let tool_calls = msg.tool_calls.as_ref().map(|calls| {
+                    calls
+                        .iter()
+                        .map(|tc| crate::models::chat::ToolCall {
+                            id: tc.id.clone(),
+                            call_type: tc.call_type.clone(),
+                            function: crate::models::chat::FunctionCall {
+                                name: tc.function.name.clone(),
+                                arguments: tc.function.arguments.clone(),
+                            },
+                        })
+                        .collect()
+                });
 
-                    Some(Choice {
-                        index: msg.index,
-                        message: ChatMessage {
-                            role: msg.role.clone(),
-                            content,
-                            name: None,
-                            tool_calls,
-                            tool_call_id: None,
-                        },
-                        finish_reason: msg.status.clone(),
-                        logprobs: None,
-                    })
-                }
-                _ => None,
+                Some(Choice {
+                    index: msg.index,
+                    message: ChatMessage {
+                        role: msg.role.clone(),
+                        content,
+                        name: None,
+                        tool_calls,
+                        tool_call_id: None,
+                    },
+                    finish_reason: msg.status.clone(),
+                    logprobs: None,
+                })
             }
+            _ => None,
         })
         .collect();
 
@@ -297,26 +317,29 @@ pub fn transform_chat_stream_to_responses_stream(
         .iter()
         .filter_map(|choice| {
             let delta = choice.delta.as_ref()?;
-            Some(StreamOutputItem::Message(crate::models::response::StreamMessageDelta {
-                index: choice.index,
-                delta: Some(crate::models::response::MessageDelta {
-                    role: delta.role.clone(),
-                    content: delta.content.clone(),
-                    tool_calls: delta.tool_calls.as_ref().map(|calls| {
-                        calls.iter().map(|tc| {
-                            ToolCallOutput {
-                                id: tc.id.clone(),
-                                call_type: tc.call_type.clone(),
-                                function: FunctionCallOutputFunction {
-                                    name: tc.function.name.clone(),
-                                    arguments: tc.function.arguments.clone(),
-                                },
-                            }
-                        }).collect()
+            Some(StreamOutputItem::Message(
+                crate::models::response::StreamMessageDelta {
+                    index: choice.index,
+                    delta: Some(crate::models::response::MessageDelta {
+                        role: delta.role.clone(),
+                        content: delta.content.clone(),
+                        tool_calls: delta.tool_calls.as_ref().map(|calls| {
+                            calls
+                                .iter()
+                                .map(|tc| ToolCallOutput {
+                                    id: tc.id.clone(),
+                                    call_type: tc.call_type.clone(),
+                                    function: FunctionCallOutputFunction {
+                                        name: tc.function.name.clone(),
+                                        arguments: tc.function.arguments.clone(),
+                                    },
+                                })
+                                .collect()
+                        }),
                     }),
-                }),
-                status: choice.finish_reason.clone(),
-            }))
+                    status: choice.finish_reason.clone(),
+                },
+            ))
         })
         .collect();
 
@@ -341,34 +364,33 @@ pub fn transform_responses_stream_to_chat_stream(
     let choices: Vec<ChatStreamingChoice> = responses_chunk
         .output
         .iter()
-        .filter_map(|item| {
-            match item {
-                StreamOutputItem::Message(msg) => {
-                    let delta = msg.delta.as_ref()?;
-                    Some(ChatStreamingChoice {
-                        index: msg.index,
-                        delta: Some(ChatDelta {
-                            role: delta.role.clone(),
-                            content: delta.content.clone(),
-                            tool_calls: delta.tool_calls.as_ref().map(|calls| {
-                                calls.iter().map(|tc| {
-                                    ChatToolCall {
-                                        id: tc.id.clone(),
-                                        call_type: tc.call_type.clone(),
-                                        function: crate::models::chat::FunctionCall {
-                                            name: tc.function.name.clone(),
-                                            arguments: tc.function.arguments.clone(),
-                                        },
-                                    }
-                                }).collect()
-                            }),
+        .filter_map(|item| match item {
+            StreamOutputItem::Message(msg) => {
+                let delta = msg.delta.as_ref()?;
+                Some(ChatStreamingChoice {
+                    index: msg.index,
+                    delta: Some(ChatDelta {
+                        role: delta.role.clone(),
+                        content: delta.content.clone(),
+                        tool_calls: delta.tool_calls.as_ref().map(|calls| {
+                            calls
+                                .iter()
+                                .map(|tc| ChatToolCall {
+                                    id: tc.id.clone(),
+                                    call_type: tc.call_type.clone(),
+                                    function: crate::models::chat::FunctionCall {
+                                        name: tc.function.name.clone(),
+                                        arguments: tc.function.arguments.clone(),
+                                    },
+                                })
+                                .collect()
                         }),
-                        finish_reason: msg.status.clone(),
-                        logprobs: None,
-                    })
-                }
-                _ => None,
+                    }),
+                    finish_reason: msg.status.clone(),
+                    logprobs: None,
+                })
             }
+            _ => None,
         })
         .collect();
 
@@ -397,15 +419,13 @@ mod tests {
     fn test_transform_chat_to_responses_request() {
         let chat_req = ChatRequest {
             model: "gpt-4".to_string(),
-            messages: vec![
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: Some("Hello".to_string()),
-                    name: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                },
-            ],
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some("Hello".to_string()),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(1000),
@@ -511,16 +531,20 @@ mod tests {
             object: "response".to_string(),
             created: 1234567890,
             model: "gpt-4".to_string(),
-            output: vec![OutputItem::Message(crate::models::response::MessageOutput {
-                index: 0,
-                role: "assistant".to_string(),
-                content: vec![ContentBlock::OutputText(crate::models::response::OutputText {
-                    text: "Hello!".to_string(),
-                    annotations: None,
-                })],
-                status: Some("completed".to_string()),
-                tool_calls: None,
-            })],
+            output: vec![OutputItem::Message(
+                crate::models::response::MessageOutput {
+                    index: 0,
+                    role: "assistant".to_string(),
+                    content: vec![ContentBlock::OutputText(
+                        crate::models::response::OutputText {
+                            text: "Hello!".to_string(),
+                            annotations: None,
+                        },
+                    )],
+                    status: Some("completed".to_string()),
+                    tool_calls: None,
+                },
+            )],
             usage: Some(ResponsesUsage {
                 input_tokens: 10,
                 output_tokens: 5,

@@ -124,10 +124,16 @@ impl SseEvent {
     pub fn to_sse(&self) -> String {
         match self {
             SseEvent::ChatCompletion(chunk) => {
-                format!("data: {}\n\n", serde_json::to_string(chunk).unwrap_or_default())
+                format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(chunk).unwrap_or_default()
+                )
             }
             SseEvent::Usage(usage) => {
-                format!("data: {}\n\n", serde_json::to_string(usage).unwrap_or_default())
+                format!(
+                    "data: {}\n\n",
+                    serde_json::to_string(usage).unwrap_or_default()
+                )
             }
             SseEvent::Done => "data: [DONE]\n\n".to_string(),
         }
@@ -156,7 +162,11 @@ impl StreamingResponseBuilder {
     }
 
     #[allow(dead_code)]
-    pub fn build_chunk(&self, content: String, finish_reason: Option<String>) -> ChatCompletionChunk {
+    pub fn build_chunk(
+        &self,
+        content: String,
+        finish_reason: Option<String>,
+    ) -> ChatCompletionChunk {
         ChatCompletionChunk {
             id: self.id.clone(),
             object: "chat.completion.chunk".to_string(),

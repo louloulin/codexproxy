@@ -53,10 +53,7 @@ impl LLMProvider for OpenAIProvider {
         &self.client
     }
 
-    async fn chat(
-        &self,
-        request: ChatRequest,
-    ) -> Result<ChatResponse, ProviderError> {
+    async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
         let url = self.build_url("/chat/completions");
 
         // Serialize request
@@ -95,10 +92,7 @@ impl LLMProvider for OpenAIProvider {
         Ok(chat_response)
     }
 
-    async fn chat_streaming(
-        &self,
-        request: ChatRequest,
-    ) -> Result<StreamingChat, ProviderError> {
+    async fn chat_streaming(&self, request: ChatRequest) -> Result<StreamingChat, ProviderError> {
         let url = self.build_url("/chat/completions");
 
         // Serialize request with stream: true

@@ -53,10 +53,7 @@ impl LLMProvider for ZhipuProvider {
         &self.client
     }
 
-    async fn chat(
-        &self,
-        request: ChatRequest,
-    ) -> Result<ChatResponse, ProviderError> {
+    async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
         let url = self.build_url("/chat/completions");
 
         // Serialize request
@@ -95,10 +92,7 @@ impl LLMProvider for ZhipuProvider {
         Ok(chat_response)
     }
 
-    async fn chat_streaming(
-        &self,
-        request: ChatRequest,
-    ) -> Result<StreamingChat, ProviderError> {
+    async fn chat_streaming(&self, request: ChatRequest) -> Result<StreamingChat, ProviderError> {
         let url = self.build_url("/chat/completions");
 
         // Serialize request with stream: true
@@ -184,10 +178,7 @@ mod tests {
     fn test_zhipu_url_building() {
         let provider = ZhipuProvider::from_env();
         let url = provider.build_url("/chat/completions");
-        assert_eq!(
-            url,
-            "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-        );
+        assert_eq!(url, "https://open.bigmodel.cn/api/paas/v4/chat/completions");
     }
 
     #[test]
