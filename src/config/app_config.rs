@@ -12,6 +12,33 @@ pub struct Config {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RateLimitConfig {
+    #[serde(default = "default_rate_limit_requests")]
+    pub requests_per_minute: u32,
+    #[serde(default = "default_rate_limit_burst")]
+    pub burst: u32,
+}
+
+fn default_rate_limit_requests() -> u32 {
+    60 // 60 requests per minute by default
+}
+
+fn default_rate_limit_burst() -> u32 {
+    10 // Allow burst of 10 requests
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            requests_per_minute: default_rate_limit_requests(),
+            burst: default_rate_limit_burst(),
+        }
+    }
 }
 
 impl Default for ServerConfig {
@@ -19,6 +46,7 @@ impl Default for ServerConfig {
         Self {
             host: "0.0.0.0".to_string(),
             port: 8080,
+            rate_limit: RateLimitConfig::default(),
         }
     }
 }

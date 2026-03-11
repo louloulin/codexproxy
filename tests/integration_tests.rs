@@ -15,10 +15,7 @@ use tower::ServiceExt;
 
 fn create_test_config() -> Config {
     Config {
-        server: openai_proxy::config::ServerConfig {
-            host: "0.0.0.0".to_string(),
-            port: 8080,
-        },
+        server: openai_proxy::config::ServerConfig::default(),
         providers: openai_proxy::config::ProvidersConfig {
             openai: openai_proxy::config::ProviderConfig {
                 api_key: "test-openai-key".to_string(),
@@ -330,10 +327,7 @@ async fn test_provider_selection_by_model() {
 async fn test_missing_provider_error() {
     // Create config without API keys
     let config = Config {
-        server: openai_proxy::config::ServerConfig {
-            host: "0.0.0.0".to_string(),
-            port: 8080,
-        },
+        server: openai_proxy::config::ServerConfig::default(),
         providers: openai_proxy::config::ProvidersConfig {
             openai: openai_proxy::config::ProviderConfig {
                 api_key: "".to_string(),
