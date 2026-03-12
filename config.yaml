@@ -10,17 +10,19 @@ providers:
     timeout: 120
 
   zhipu:
-    api_key: ""
+    api_key: "9bc4908eeaec48109dc363c638c45457.qCuUoeMnsZme5eum"
     base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
     default_model: "glm-4"
     timeout: 60
 
 routing:
-  default: "openai"
+  default: "zhipu"
   model_mapping:
-    gpt-4*: "openai"
-    gpt-3.5*: "openai"
-    glm*: "zhipu"
+    gpt-4o: "openai"
+    gpt-4: "openai"
+    gpt-3.5-turbo: "openai"
+    glm-4: "zhipu"
+    glm-4-flash: "zhipu"
 
 logging:
   level: "info"
