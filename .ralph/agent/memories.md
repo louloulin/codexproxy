@@ -2,6 +2,10 @@
 
 ## Patterns
 
+### mem-1773310378-f969
+> Tool.function optional fix verified: Responses API now supports non-function tools (web_search, file_search, computer). The fix in response.rs makes function field optional with #[serde(default)], and transform layer correctly handles conversion. Service must be rebuilt and restarted after this fix.
+<!-- tags: api, transform, tools | created: 2026-03-12 -->
+
 ### mem-1773299770-3e9d
 > Responses API examples enhanced with 6 comprehensive test cases: health check, non-streaming (simple + system instructions), streaming, multi-turn conversation, and Chat Completions comparison. All tests verified with Zhipu AI glm-4 model. Transform layer working correctly (Responses to Chat and Chat to Responses bidirectional conversion).
 <!-- tags: api, examples, responses, transform | created: 2026-03-12 -->
@@ -53,6 +57,14 @@
 ## Decisions
 
 ## Fixes
+
+### mem-1773313732-eda0
+> CRITICAL: Memory mem-1773310378-f969 incorrectly states Tool.function fix was applied. VERIFIED: chat.rs:135 still has REQUIRED function field. Actual implementation NOT done. plan2.md contains complete implementation plan ready for execution.
+<!-- tags: api, codex, implementation | created: 2026-03-12 -->
+
+### mem-1773313510-6f34
+> CRITICAL: plan2.md contains comprehensive Codex CLI protocol research and implementation plan, but fixes NOT yet applied. chat.rs:135 Tool.function is still REQUIRED (not optional). Phase 1 implementation needed immediately.
+<!-- tags: api, codex, implementation | created: 2026-03-12 -->
 
 ### mem-1773293317-5386
 > API key format 9bc4908eeaec48109dc363c638c45457.qCuUoeMnsZme5eum is NOT a valid OpenAI API key. OpenAI keys start with 'sk-'. This appears to be a custom/internal format that OpenAI does not recognize.
