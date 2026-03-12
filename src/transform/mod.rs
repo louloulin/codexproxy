@@ -49,14 +49,17 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
         .map(|tools| {
             tools
                 .iter()
-                .map(|t| crate::models::response::Tool {
-                    tool_type: t.tool_type.clone(),
-                    function: Some(crate::models::response::FunctionDefinition {
-                        name: t.function.name.clone(),
-                        description: t.function.description.clone(),
-                        parameters: t.function.parameters.clone(),
-                        strict: None,
-                    }),
+                .filter_map(|t| {
+                    // Only convert tools that have a function definition
+                    t.function.as_ref().map(|f| crate::models::response::Tool {
+                        tool_type: t.tool_type.clone(),
+                        function: Some(crate::models::response::FunctionDefinition {
+                            name: f.name.clone(),
+                            description: f.description.clone(),
+                            parameters: f.parameters.clone(),
+                            strict: Some(true),  // Responses API defaults to strict
+                        }),
+                    })
                 })
                 .collect()
         })
@@ -143,11 +146,11 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                     // Only convert tools that have a function definition
                     t.function.as_ref().map(|f| crate::models::chat::Tool {
                         tool_type: t.tool_type.clone(),
-                        function: crate::models::chat::FunctionDefinition {
+                        function: Some(crate::models::chat::FunctionDefinition {
                             name: f.name.clone(),
                             description: f.description.clone(),
                             parameters: f.parameters.clone(),
-                        },
+                        }),
                     })
                 })
                 .collect(),

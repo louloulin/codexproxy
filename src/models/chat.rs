@@ -127,12 +127,13 @@ pub struct Message {
 /// Tool that can be called by the model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
-    /// The type of the tool. Currently, only "function" is supported
+    /// The type of the tool. Values: "function", "web_search", "file_search", "computer_use", "mcp"
     #[serde(rename = "type")]
     pub tool_type: String,
 
-    /// The function definition
-    pub function: FunctionDefinition,
+    /// The function definition (only for type "function")
+    #[serde(default)]
+    pub function: Option<FunctionDefinition>,
 }
 
 /// Function definition
