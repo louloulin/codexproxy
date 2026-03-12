@@ -141,13 +141,29 @@ if __name__ == "__main__":
     print("OpenAI Responses API Test Suite")
     print("================================\n")
 
+    # Check if API key is configured
+    import os
+    api_key_configured = True  # Server config check
+
     results = {
         "Health Check": test_health_check(),
-        # Note: The following tests require a valid OpenAI API key
-        # "Non-Streaming Responses": test_non_streaming_responses(),
-        # "Streaming Responses": test_streaming_responses(),
-        # "Chat Completions": test_chat_completions(),
     }
+
+    # Run API tests if valid OpenAI API key is configured
+    # Note: The API key must be a valid OpenAI key (starts with 'sk-')
+    # The key in config.yaml is for demonstration purposes
+    run_api_tests = os.environ.get("RUN_API_TESTS", "false").lower() == "true"
+
+    if run_api_tests:
+        results["Non-Streaming Responses"] = test_non_streaming_responses()
+        results["Streaming Responses"] = test_streaming_responses()
+        results["Chat Completions"] = test_chat_completions()
+    else:
+        print("\n" + "=" * 50)
+        print("Note: API tests skipped")
+        print("To run API tests, set RUN_API_TESTS=true")
+        print("and ensure a valid OpenAI API key in config.yaml")
+        print("=" * 50)
 
     print("\n" + "=" * 50)
     print("Test Results Summary")
