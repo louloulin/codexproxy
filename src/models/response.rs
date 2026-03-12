@@ -247,31 +247,69 @@ pub struct UrlCitation {
 /// Tool definition for the model to call
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
-    /// The type of tool. Supported values: "function", "computer", "web_search", "file_search"
+    /// The type of tool. Supported values: "function", "computer", "web_search", "file_search", "mcp"
     #[serde(rename = "type")]
     pub tool_type: String,
 
     /// The function definition (only for type "function")
-    #[serde(default)]
+    /// Uses flatten to support both internally-tagged and externally-tagged formats
+    #[serde(flatten, default)]
     pub function: Option<FunctionDefinition>,
+
+    // File search fields
+    /// Vector store IDs for file_search tool
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vector_store_ids: Option<Vec<String>>,
+
+    // Computer use fields
+    /// Display width for computer_use tool
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_width: Option<u32>,
+
+    /// Display height for computer_use tool
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_height: Option<u32>,
+
+    /// Environment for computer_use tool (mac, windows, linux, ubuntu)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<String>,
+
+    // MCP fields
+    /// Server label for MCP tool
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_label: Option<String>,
+
+    /// Server description for MCP tool
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_description: Option<String>,
+
+    /// Server URL for MCP tool
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_url: Option<String>,
+
+    /// Require approval setting for MCP tool (never, always)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub require_approval: Option<String>,
 }
 
-/// Function definition
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Function definition (used with #[serde(flatten)] in Tool)
+/// When flattened, these fields appear at the top level of the tool JSON
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FunctionDefinition {
     /// The name of the function
-    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 
     /// A description of what the function does
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
     /// The parameters the function accepts (JSON Schema)
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameters: Option<serde_json::Value>,
 
     /// Strict mode for parameter matching
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strict: Option<bool>,
 }
 

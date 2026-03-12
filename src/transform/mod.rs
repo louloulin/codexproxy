@@ -54,11 +54,20 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
                     t.function.as_ref().map(|f| crate::models::response::Tool {
                         tool_type: t.tool_type.clone(),
                         function: Some(crate::models::response::FunctionDefinition {
-                            name: f.name.clone(),
+                            name: Some(f.name.clone()),
                             description: f.description.clone(),
                             parameters: f.parameters.clone(),
                             strict: Some(true),  // Responses API defaults to strict
                         }),
+                        // Non-function tool fields default to None
+                        vector_store_ids: None,
+                        display_width: None,
+                        display_height: None,
+                        environment: None,
+                        server_label: None,
+                        server_description: None,
+                        server_url: None,
+                        require_approval: None,
                     })
                 })
                 .collect()
@@ -147,7 +156,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                     t.function.as_ref().map(|f| crate::models::chat::Tool {
                         tool_type: t.tool_type.clone(),
                         function: Some(crate::models::chat::FunctionDefinition {
-                            name: f.name.clone(),
+                            name: f.name.clone().unwrap_or_default(),
                             description: f.description.clone(),
                             parameters: f.parameters.clone(),
                         }),
@@ -700,5 +709,179 @@ mod tests {
             round_trip_chat_resp.choices[0].message.role,
             original_chat_resp.choices[0].message.role
         );
+    }
+
+    /// Test: Deserializing non-function tools
+    #[test]
+    fn test_deserialize_web_search_tool() {
+        let json = r#"{"type": "web_search"}"#;
+        let tool: crate::models::response::Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.tool_type, "web_search");
+        // Function fields should all be None for non-function tools
+        if let Some(ref func) = tool.function {
+            assert!(func.name.is_none());
+            assert!(func.description.is_none());
+            assert!(func.parameters.is_none());
+            assert!(func.strict.is_none());
+        }
+        assert!(tool.vector_store_ids.is_none());
+        assert!(tool.display_width.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_file_search_tool() {
+        let json = r#"{
+            "type": "file_search",
+            "vector_store_ids": ["vs_abc123", "vs_def456"]
+        }"#;
+        let tool: crate::models::response::Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.tool_type, "file_search");
+        // Function fields should all be None for non-function tools
+        if let Some(ref func) = tool.function {
+            assert!(func.name.is_none());
+            assert!(func.description.is_none());
+            assert!(func.parameters.is_none());
+            assert!(func.strict.is_none());
+        }
+        assert_eq!(tool.vector_store_ids, Some(vec!["vs_abc123".to_string(), "vs_def456".to_string()]));
+    }
+
+    #[test]
+    fn test_deserialize_computer_use_tool() {
+        let json = r#"{
+            "type": "computer_use",
+            "display_width": 1024,
+            "display_height": 768,
+            "environment": "mac"
+        }"#;
+        let tool: crate::models::response::Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.tool_type, "computer_use");
+        // Function fields should all be None for non-function tools
+        if let Some(ref func) = tool.function {
+            assert!(func.name.is_none());
+            assert!(func.description.is_none());
+            assert!(func.parameters.is_none());
+            assert!(func.strict.is_none());
+        }
+        assert_eq!(tool.display_width, Some(1024));
+        assert_eq!(tool.display_height, Some(768));
+        assert_eq!(tool.environment, Some("mac".to_string()));
+    }
+
+    #[test]
+    fn test_deserialize_mcp_tool() {
+        let json = r#"{
+            "type": "mcp",
+            "server_label": "dmcp",
+            "server_description": "Dice rolling server",
+            "server_url": "https://example.com/sse",
+            "require_approval": "never"
+        }"#;
+        let tool: crate::models::response::Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.tool_type, "mcp");
+        // Function fields should all be None for non-function tools
+        if let Some(ref func) = tool.function {
+            assert!(func.name.is_none());
+            assert!(func.description.is_none());
+            assert!(func.parameters.is_none());
+            assert!(func.strict.is_none());
+        }
+        assert_eq!(tool.server_label, Some("dmcp".to_string()));
+        assert_eq!(tool.server_description, Some("Dice rolling server".to_string()));
+        assert_eq!(tool.server_url, Some("https://example.com/sse".to_string()));
+        assert_eq!(tool.require_approval, Some("never".to_string()));
+    }
+
+    #[test]
+    fn test_serialize_web_search_tool() {
+        let tool = crate::models::response::Tool {
+            tool_type: "web_search".to_string(),
+            function: None,
+            vector_store_ids: None,
+            display_width: None,
+            display_height: None,
+            environment: None,
+            server_label: None,
+            server_description: None,
+            server_url: None,
+            require_approval: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert_eq!(json, r#"{"type":"web_search"}"#);
+    }
+
+    #[test]
+    fn test_serialize_function_tool() {
+        // Test that function tool serializes with internally-tagged format
+        let tool = crate::models::response::Tool {
+            tool_type: "function".to_string(),
+            function: Some(crate::models::response::FunctionDefinition {
+                name: Some("get_weather".to_string()),
+                description: Some("Get weather".to_string()),
+                parameters: Some(serde_json::json!({"type": "object"})),
+                strict: Some(true),
+            }),
+            vector_store_ids: None,
+            display_width: None,
+            display_height: None,
+            environment: None,
+            server_label: None,
+            server_description: None,
+            server_url: None,
+            require_approval: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        // Should serialize with fields at top level (internally-tagged)
+        assert!(json.contains(r#""type":"function""#));
+        assert!(json.contains(r#""name":"get_weather""#));
+        assert!(json.contains(r#""description":"Get weather""#));
+        assert!(json.contains(r#""strict":true"#));
+        // Should NOT contain null values
+        assert!(!json.contains(":null"));
+    }
+
+    #[test]
+    fn test_responses_request_with_mixed_tools() {
+        let json = r#"{
+            "model": "gpt-4",
+            "tools": [
+                {"type": "web_search"},
+                {"type": "file_search", "vector_store_ids": ["vs_123"]},
+                {"type": "computer_use", "display_width": 1024, "display_height": 768, "environment": "mac"},
+                {"type": "mcp", "server_label": "custom", "server_url": "https://example.com/sse", "require_approval": "never"},
+                {"type": "function", "name": "get_weather", "description": "Get weather", "parameters": {"type": "object"}, "strict": true}
+            ],
+            "input": [
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
+            ]
+        }"#;
+
+        let req: crate::models::response::ResponsesRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.tools.len(), 5);
+
+        // Verify tool types
+        assert_eq!(req.tools[0].tool_type, "web_search");
+        assert_eq!(req.tools[1].tool_type, "file_search");
+        assert_eq!(req.tools[2].tool_type, "computer_use");
+        assert_eq!(req.tools[3].tool_type, "mcp");
+        assert_eq!(req.tools[4].tool_type, "function");
+
+        // Verify non-function tools have no function fields (or all fields are None)
+        for i in 0..4 {
+            if let Some(ref func) = req.tools[i].function {
+                assert!(func.name.is_none());
+                assert!(func.description.is_none());
+                assert!(func.parameters.is_none());
+                assert!(func.strict.is_none());
+            }
+        }
+
+        // Verify function tool has function fields
+        assert!(req.tools[4].function.is_some());
+        let func = req.tools[4].function.as_ref().unwrap();
+        assert_eq!(func.name, Some("get_weather".to_string()));
+        assert_eq!(func.description, Some("Get weather".to_string()));
+        assert!(func.parameters.is_some());
+        assert_eq!(func.strict, Some(true));
     }
 }
