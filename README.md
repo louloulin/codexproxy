@@ -837,6 +837,200 @@ If you're still having issues:
    - Zhipu AI: https://open.bigmodel.cn
 5. **Search issues**: Check project issue tracker
 
+## Transform Layer (API 转换层)
+
+This section explains how the proxy transforms between OpenAI's Chat Completions API and Responses API formats.
+
+### Why Transform?
+
+OpenAI introduced the Responses API as a newer, simplified API structure. However, many existing applications use the Chat Completions API. This proxy allows you to:
+
+1. **Use either API format** - Send requests in either format, the proxy handles conversion
+2. **Provider compatibility** - All LLM providers support Chat Completions, but not all support Responses API natively
+3. **Bidirectional conversion** - Transform works in both directions
+
+### Request Format Differences
+
+| Chat Completions | Responses API |
+|----------------|--------------|
+| `messages: [{"role": "user", "content": "..."}]` | `input: [{"type": "message", "role": "user", "content": [...]}]` |
+| `response_format: {type: "json_object"}` | `text: {format: {type: "json_object"}}` |
+| `tools: [...]` | `tools: [...]` (similar structure) |
+
+### Code Analysis: Transform Functions
+
+The transform layer is located in `src/transform/mod.rs` with 6 main functions:
+
+#### 1. Request Transformation
+
+```rust
+// Chat → Responses: src/transform/mod.rs:32
+transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesRequest
+
+// Responses → Chat: src/transform/mod.rs:102
+transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> ChatRequest
+```
+
+Key conversions:
+- `messages` → `input` with wrapped `Item::Message` containing `ContentBlock::InputText`
+- `response_format` (Chat) → `text.format` (Responses)
+- Tool definitions are adapted between formats
+
+#### 2. Response Transformation
+
+```rust
+// Chat → Responses: src/transform/mod.rs:193
+transform_chat_to_responses_response(chat_resp: &ChatResponse) -> ResponsesResponse
+
+// Responses → Chat: src/transform/mod.rs:250
+transform_responses_to_chat_response(responses_resp: &ResponsesResponse) -> ChatResponse
+```
+
+Key conversions:
+- `choices[].message.content` → `output[].content[]` with `ContentBlock::OutputText`
+- Usage fields: `prompt_tokens/completion_tokens` map between formats
+- `finish_reason` → `status`
+
+#### 3. Streaming Transformation
+
+```rust
+// Chat streaming → Responses streaming: src/transform/mod.rs:312
+transform_chat_stream_to_responses_stream(chat_chunk: &ChatCompletionChunk) -> ResponsesStreamChunk
+
+// Responses streaming → Chat streaming: src/transform/mod.rs:361
+transform_responses_stream_to_chat_stream(responses_chunk: &ResponsesStreamChunk) -> ChatCompletionChunk
+```
+
+### Request Flow Analysis
+
+Here's how a request flows through the system:
+
+#### Scenario: Client sends Responses API request
+
+```
+Client Request (Responses format)
+        │
+        ▼
+┌──────────────────────────────────────┐
+│ POST /v1/responses                   │
+│ src/handlers/mod.rs:152              │
+└──────────────────────────────────────┘
+        │
+        ▼
+transform_responses_to_chat_request()  │ src/transform/mod.rs:102
+        │ Converts: input → messages
+        │          text.format → response_format
+        ▼
+┌──────────────────────────────────────┐
+│ Provider.chat()                      │
+│ (Chat Completions format)             │
+└──────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────┐
+│ LLM Provider (OpenAI/Zhipu)         │
+└──────────────────────────────────────┘
+        │
+        ▼
+transform_chat_to_responses_response()  │ src/transform/mod.rs:193
+        │ Converts: choices → output
+        │          message.content → OutputText
+        ▼
+Client Response (Responses format)
+```
+
+#### Scenario: Client sends Chat Completions request
+
+```
+Client Request (Chat format)
+        │
+        ▼
+┌──────────────────────────────────────┐
+│ POST /v1/chat/completions            │
+│ src/handlers/mod.rs:91              │
+└──────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────┐
+│ Provider.chat()                      │
+│ (Chat Completions format)             │
+└──────────────────────────────────────┘
+        │
+        ▼
+transform_chat_to_responses_response()  │ src/transform/mod.rs:193
+        │ Transform to Responses format
+        │ (demonstrates conversion works)
+        ▼
+transform_responses_to_chat_response()  │ src/transform/mod.rs:250
+        │ Transform back to Chat format
+        ▼
+Client Response (Chat format)
+```
+
+### Code Example: How Responses Request Becomes Chat Request
+
+When a client sends a Responses API request like:
+
+```json
+{
+  "model": "gpt-4o",
+  "input": [
+    {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
+  ],
+  "text": {"format": {"type": "json_object"}}
+}
+```
+
+The transform function (`src/transform/mod.rs:102-190`) converts it to:
+
+```rust
+ChatRequest {
+    model: "gpt-4o",
+    messages: vec![
+        ChatMessage {
+            role: "user",
+            content: Some("Hello"),  // Extracted from InputText
+            ...
+        }
+    ],
+    response_format: Some(ResponseFormat::JsonObject),  // From text.format
+    ...
+}
+```
+
+### Testing the Transform Layer
+
+Run the built-in tests to verify transform correctness:
+
+```bash
+cargo test transform
+# Output: test_transform_chat_to_responses_request ... ok
+#         test_transform_responses_to_chat_request ... ok
+#         test_round_trip_chat_to_responses_to_chat_request ... ok
+#         ...
+```
+
+The round-trip tests (`src/transform/mod.rs:565-697`) verify:
+- Chat → Responses → Chat preserves all critical fields
+- Chat Response → Responses Response → Chat Response preserves data integrity
+
+### Using Transform in Your Own Code
+
+```rust
+use openai_proxy::transform;
+
+// Convert Responses request to Chat format
+let chat_req = transform::transform_responses_to_chat_request(&responses_request);
+
+// Call your LLM provider with Chat format
+let chat_response = provider.chat(chat_req).await?;
+
+// Convert response back to Responses format
+let responses_resp = transform::transform_chat_to_responses_response(&chat_response);
+```
+
+---
+
 ## Project Structure
 
 ```

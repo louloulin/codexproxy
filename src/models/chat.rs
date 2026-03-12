@@ -309,15 +309,17 @@ pub struct LogProb {
 
 /// Usage statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Usage {
     /// Number of tokens in the prompt
+    #[serde(alias = "promptTokens")]
     pub prompt_tokens: u32,
 
     /// Number of tokens in the completion
+    #[serde(alias = "completionTokens")]
     pub completion_tokens: u32,
 
     /// Total number of tokens
+    #[serde(alias = "totalTokens")]
     pub total_tokens: u32,
 }
 

@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde_json::Value;
 
 use crate::config::ProviderConfig;
-use crate::models::{ChatRequest, ChatResponse};
+use crate::models::chat::{ChatCompletionChunk, ChatRequest, ChatResponse};
 
 use super::{parse_provider_error, LLMProvider, ProviderError, StreamingChat};
 
@@ -124,8 +124,32 @@ impl LLMProvider for ZhipuProvider {
             return Err(parse_provider_error(status, &body));
         }
 
-        // Return streaming response
-        Ok(StreamingChat::new(status.as_u16(), vec![]))
+        // Process SSE stream and collect chunks
+        let mut chunks = Vec::new();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
+
+        let body_str = String::from_utf8_lossy(&body);
+
+        // Parse SSE format: "data: {...}\n\n" or "data: [DONE]\n\n"
+        for line in body_str.lines() {
+            let line = line.trim();
+            if line.starts_with("data: ") {
+                let data = &line[6..]; // Remove "data: " prefix
+                if data == "[DONE]" {
+                    break;
+                }
+                // Parse the chunk
+                if let Ok(chunk) = serde_json::from_str::<ChatCompletionChunk>(data) {
+                    chunks.push(chunk);
+                }
+            }
+        }
+
+        // Return streaming response with collected chunks
+        Ok(StreamingChat::new(status.as_u16(), chunks))
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ProviderError> {
