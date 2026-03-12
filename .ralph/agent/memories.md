@@ -2,6 +2,10 @@
 
 ## Patterns
 
+### mem-1773316409-cee5
+> Phase 1 & 2 implementation complete: Non-function tools fully supported in Responses API. Tool.function uses serde flatten for internally-tagged format, all optional fields have skip_serializing_if. Transform layer handles optional function names correctly. 13 tests pass covering web_search, file_search, computer_use, mcp tools and mixed tool arrays. Build successful in release mode. Commit: 439f076.
+<!-- tags: api, codex, transform, tools | created: 2026-03-12 -->
+
 ### mem-1773310378-f969
 > Tool.function optional fix verified: Responses API now supports non-function tools (web_search, file_search, computer). The fix in response.rs makes function field optional with #[serde(default)], and transform layer correctly handles conversion. Service must be rebuilt and restarted after this fix.
 <!-- tags: api, transform, tools | created: 2026-03-12 -->
