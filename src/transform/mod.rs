@@ -561,4 +561,138 @@ mod tests {
         assert_eq!(chat_resp.model, "gpt-4");
         assert!(chat_resp.choices.len() > 0);
     }
+
+    /// Round-trip test: Chat → Responses → Chat preserves data integrity
+    #[test]
+    fn test_round_trip_chat_to_responses_to_chat_request() {
+        let original_chat_req = ChatRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some("You are helpful".to_string()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some("Hello".to_string()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            max_tokens: Some(1000),
+            stream: Some(false),
+            stop: Some(vec!["STOP".to_string()]),
+            n: 1,
+            stream_options: None,
+            include_usage: Some(true),
+            response_format: None,
+            seed: Some(42),
+            organization: None,
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            logit_bias: None,
+            user: Some("test-user".to_string()),
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: true,
+        };
+
+        // Transform Chat → Responses
+        let responses_req = transform_chat_to_responses_request(&original_chat_req);
+
+        // Transform Responses → Chat
+        let round_trip_chat_req = transform_responses_to_chat_request(&responses_req);
+
+        // Verify critical fields are preserved
+        assert_eq!(round_trip_chat_req.model, original_chat_req.model);
+        assert_eq!(
+            round_trip_chat_req.messages.len(),
+            original_chat_req.messages.len()
+        );
+        assert_eq!(
+            round_trip_chat_req.temperature,
+            original_chat_req.temperature
+        );
+        assert_eq!(round_trip_chat_req.top_p, original_chat_req.top_p);
+        assert_eq!(round_trip_chat_req.max_tokens, original_chat_req.max_tokens);
+        assert_eq!(round_trip_chat_req.stream, original_chat_req.stream);
+        assert_eq!(round_trip_chat_req.seed, original_chat_req.seed);
+        assert_eq!(round_trip_chat_req.user, original_chat_req.user);
+
+        // Verify message content is preserved
+        for (i, msg) in round_trip_chat_req.messages.iter().enumerate() {
+            assert_eq!(msg.role, original_chat_req.messages[i].role);
+            assert_eq!(msg.content, original_chat_req.messages[i].content);
+        }
+    }
+
+    /// Round-trip test: Chat Response → Responses Response → Chat Response preserves data
+    #[test]
+    fn test_round_trip_chat_to_responses_to_chat_response() {
+        let original_chat_resp = ChatResponse {
+            id: "chatcmpl-test123".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1234567890,
+            model: "gpt-4o".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                message: ChatMessage {
+                    role: "assistant".to_string(),
+                    content: Some("Hello! How can I help?".to_string()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                finish_reason: Some("stop".to_string()),
+                logprobs: None,
+            }],
+            usage: Some(ChatUsage {
+                prompt_tokens: 15,
+                completion_tokens: 10,
+                total_tokens: 25,
+            }),
+            service_tier: None,
+            finish_reason: Some("stop".to_string()),
+            extra: std::collections::HashMap::new(),
+        };
+
+        // Transform Chat Response → Responses Response
+        let responses_resp = transform_chat_to_responses_response(&original_chat_resp);
+
+        // Transform Responses Response → Chat Response
+        let round_trip_chat_resp = transform_responses_to_chat_response(&responses_resp);
+
+        // Verify critical fields are preserved
+        assert_eq!(round_trip_chat_resp.id, original_chat_resp.id);
+        assert_eq!(round_trip_chat_resp.model, original_chat_resp.model);
+        assert_eq!(round_trip_chat_resp.created, original_chat_resp.created);
+        assert_eq!(
+            round_trip_chat_resp.choices.len(),
+            original_chat_resp.choices.len()
+        );
+
+        // Verify usage is preserved
+        assert!(round_trip_chat_resp.usage.is_some());
+        let usage = round_trip_chat_resp.usage.unwrap();
+        let original_usage = original_chat_resp.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, original_usage.prompt_tokens);
+        assert_eq!(usage.completion_tokens, original_usage.completion_tokens);
+        assert_eq!(usage.total_tokens, original_usage.total_tokens);
+
+        // Verify choice content is preserved
+        assert_eq!(
+            round_trip_chat_resp.choices[0].message.content,
+            original_chat_resp.choices[0].message.content
+        );
+        assert_eq!(
+            round_trip_chat_resp.choices[0].message.role,
+            original_chat_resp.choices[0].message.role
+        );
+    }
 }
