@@ -262,7 +262,8 @@ pub async fn zhipu_chat_completions(
 mod tests {
     use super::*;
     use crate::config::{
-        LoggingConfig, ProviderConfig, ProvidersConfig, RoutingConfig, ServerConfig,
+        LoggingConfig, ProviderConfig, ProvidersConfig, RateLimitConfig, RoutingConfig,
+        ServerConfig,
     };
     use std::collections::HashMap;
 
@@ -271,6 +272,7 @@ mod tests {
             server: ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
+                rate_limit: RateLimitConfig::default(),
             },
             providers: ProvidersConfig {
                 openai: ProviderConfig {
@@ -337,6 +339,7 @@ mod tests {
             server: ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
+                rate_limit: RateLimitConfig::default(),
             },
             providers: ProvidersConfig {
                 openai: ProviderConfig {
