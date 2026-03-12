@@ -23,3 +23,4 @@
 {"ts":"2026-03-12T07:32:40.229481Z","type":{"kind":"loop_started","prompt":"完善readme，增加说明文档，重点关注如何配置和如何使用，如何接入"}}
 {"ts":"2026-03-12T08:18:58.977676Z","type":{"kind":"loop_completed","reason":"loop_stale"}}
 {"ts":"2026-03-12T08:21:49.546824Z","type":{"kind":"loop_started","prompt":"完善readme，增加说明文档，重点关注如何配置和如何使用，如何接入,分析整个代码，是将response请求转换成chat请求"}}
+{"ts":"2026-03-12T08:34:49.313540Z","type":{"kind":"loop_started","prompt":"\n\n\nsubmission_dispatch{submission.id=\"019ce12b-e94a-7b31-8a3e-79730c27027c\"}:turn{otel.name=\"session_task.turn\" thread.id=019ce12b-e3a7-7b61-80ca-45d5106be62b turn.id=019ce12b-e94a-7b31-8a3e-79730c27027c model=glm-5}: codex_core::codex: Turn error: unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[0]: missing field `function` at line 1 column 32330, url: http://localhost:8080/v1/responses\n"}}

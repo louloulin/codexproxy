@@ -247,12 +247,13 @@ pub struct UrlCitation {
 /// Tool definition for the model to call
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
-    /// The type of tool. Currently only "function" is supported
+    /// The type of tool. Supported values: "function", "computer", "web_search", "file_search"
     #[serde(rename = "type")]
     pub tool_type: String,
 
-    /// The function definition
-    pub function: FunctionDefinition,
+    /// The function definition (only for type "function")
+    #[serde(default)]
+    pub function: Option<FunctionDefinition>,
 }
 
 /// Function definition
