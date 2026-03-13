@@ -43,3 +43,5 @@
 {"payload":"objective: plan2.md 实现完成, tests: 43, build: success, commit: ab6f666","topic":"objective.complete","ts":"2026-03-13T02:06:17.730916+00:00"}
 {"payload":"status: success, objective: complete","topic":"loop.verified","ts":"2026-03-13T02:06:43.709272+00:00"}
 {"payload":{"build":"release","commit":"ab6f666","objective":"plan2.md 实现完成","status":"complete","tests":43},"topic":"objective.complete","ts":"2026-03-13T02:07:20.848326+00:00"}
+{"payload":"{\"status\":\"success\",\"objective\":\"plan2.md 实现完成\",\"tests\":43,\"build\":\"release\"}","topic":"loop.verified","ts":"2026-03-13T02:09:41.976319+00:00"}
+{"payload":"objective: Codex CLI Responses API 支持实现完成, status: complete, tests: 43/43 pass, build: release success","topic":"objective.complete","ts":"2026-03-13T02:12:47.892454+00:00"}
