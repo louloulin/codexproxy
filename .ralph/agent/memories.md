@@ -2,6 +2,10 @@
 
 ## Patterns
 
+### mem-1773356035-c45e
+> Codex CLI Responses API 支持实现完成: Tool.function 字段改为可选, 添加了 tool-specific 字段(vector_store_ids, display_width, computer_use, mcp), Transform 层正确处理非 function 工具, 43 tests pass, build success, commit 439f076
+<!-- tags: api, codex, implementation | created: 2026-03-12 -->
+
 ### mem-1773316409-cee5
 > Phase 1 & 2 implementation complete: Non-function tools fully supported in Responses API. Tool.function uses serde flatten for internally-tagged format, all optional fields have skip_serializing_if. Transform layer handles optional function names correctly. 13 tests pass covering web_search, file_search, computer_use, mcp tools and mixed tool arrays. Build successful in release mode. Commit: 439f076.
 <!-- tags: api, codex, transform, tools | created: 2026-03-12 -->

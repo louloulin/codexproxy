@@ -1,8 +1,8 @@
 # Loop Summary
 
-**Status:** Failed: too many consecutive failures
-**Iterations:** 5
-**Duration:** 16m 38s
+**Status:** Failed: stale loop detected
+**Iterations:** 12
+**Duration:** 1h 1m 54s
 
 ## Tasks
 
@@ -14,4 +14,4 @@ _No events recorded._
 
 ## Final Commit
 
-439f076: fix(models): support non-function tools in Responses API
+ab6f666: feat(models): 支持 Codex CLI Responses API 的非函数工具
