@@ -12,8 +12,15 @@ pub struct Config {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    #[serde(default = "default_body_limit")]
+    pub body_limit: usize,
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
+}
+
+fn default_body_limit() -> usize {
+    // Default to 10MB (10 * 1024 * 1024)
+    10 * 1024 * 1024
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -46,6 +53,7 @@ impl Default for ServerConfig {
         Self {
             host: "0.0.0.0".to_string(),
             port: 8080,
+            body_limit: default_body_limit(),
             rate_limit: RateLimitConfig::default(),
         }
     }

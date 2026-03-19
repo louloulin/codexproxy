@@ -153,6 +153,22 @@ pub async fn responses(
     State(state): State<Arc<AppState>>,
     Json(body): Json<ResponsesRequest>,
 ) -> impl IntoResponse {
+    // 请求体调试日志：记录模型与序列化后大小
+    if let Ok(body_str) = serde_json::to_string(&body) {
+        tracing::debug!(
+            model = %body.model,
+            stream = %body.stream.unwrap_or(false),
+            body_len = body_str.len(),
+            "responses request body"
+        );
+    } else {
+        tracing::debug!(
+            model = %body.model,
+            stream = %body.stream.unwrap_or(false),
+            "responses request body (serialize failed)"
+        );
+    }
+
     let provider = match state.get_provider(&body.model) {
         Ok(p) => p,
         Err(e) => return e.into_response(),
@@ -195,6 +211,19 @@ pub async fn responses(
             Ok(chat_response) => {
                 let responses_response =
                     transform::transform_chat_to_responses_response(&chat_response);
+                // 响应体调试日志：记录序列化后大小
+                if let Ok(resp_str) = serde_json::to_string(&responses_response) {
+                    tracing::debug!(
+                        status = %"200",
+                        resp_len = resp_str.len(),
+                        "responses non-streaming response body"
+                    );
+                } else {
+                    tracing::debug!(
+                        status = %"200",
+                        "responses non-streaming response body (serialize failed)"
+                    );
+                }
                 Json(responses_response).into_response()
             }
             Err(e) => Error::Provider(e.to_string()).into_response(),

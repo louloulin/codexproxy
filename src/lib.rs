@@ -11,6 +11,7 @@ pub mod logging;
 pub mod models;
 pub mod providers;
 pub mod server;
+pub mod sse;
 pub mod transform;
 
 // Re-export commonly used types

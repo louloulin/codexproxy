@@ -94,10 +94,72 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/v1/providers/zhipu/chat/completions",
             post(handlers::zhipu_chat_completions),
         )
+        // Set body limit based on configuration
+        .layer(axum::extract::DefaultBodyLimit::max(config.server.body_limit))
         .layer(
             ServiceBuilder::new()
-                // Request tracing
-                .layer(TraceLayer::new_for_http())
+                // Request tracing with richer logs
+                .layer(
+                    TraceLayer::new_for_http()
+                        .make_span_with(|request: &Request<Body>| {
+                            let content_length = request
+                                .headers()
+                                .get(axum::http::header::CONTENT_LENGTH)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
+                            let content_type = request
+                                .headers()
+                                .get(axum::http::header::CONTENT_TYPE)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
+                            tracing::info_span!(
+                                "http_request",
+                                method = %request.method(),
+                                uri = %request.uri(),
+                                content_length,
+                                content_type
+                            )
+                        })
+                        .on_request(|request: &Request<_>, _span: &tracing::Span| {
+                            let content_length = request
+                                .headers()
+                                .get(axum::http::header::CONTENT_LENGTH)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
+                            let content_type = request
+                                .headers()
+                                .get(axum::http::header::CONTENT_TYPE)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
+                            tracing::debug!(
+                                method = %request.method(),
+                                uri = %request.uri(),
+                                content_length,
+                                content_type,
+                                "incoming request"
+                            );
+                        })
+                        .on_response(|response: &Response, latency: std::time::Duration, _span: &tracing::Span| {
+                            let status = response.status();
+                            let content_length = response
+                                .headers()
+                                .get(axum::http::header::CONTENT_LENGTH)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
+                            let content_type = response
+                                .headers()
+                                .get(axum::http::header::CONTENT_TYPE)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
+                            tracing::debug!(
+                                status = %status,
+                                latency_ms = latency.as_millis(),
+                                content_length,
+                                content_type,
+                                "response sent"
+                            );
+                        }),
+                )
                 // CORS layer
                 .layer(CorsLayer::permissive()),
         )

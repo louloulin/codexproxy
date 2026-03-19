@@ -78,6 +78,16 @@ pub struct ResponsesRequest {
     pub user: Option<String>,
 }
 
+/// Message phase for distinguishing intermediate vs final content
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MessagePhase {
+    /// Intermediate commentary or thinking
+    Commentary,
+    /// Final answer content
+    FinalAnswer,
+}
+
 /// Input item in Responses API
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -90,29 +100,79 @@ pub enum Item {
     FunctionCall(FunctionCallItem),
     /// A function call output item
     FunctionCallOutput(FunctionCallOutputItem),
+    /// Local shell call (computer_use tool)
+    LocalShellCall(LocalShellCallItem),
+    /// Tool search call (file_search tool)
+    ToolSearchCall(ToolSearchCallItem),
+    /// Custom tool call
+    CustomToolCall(CustomToolCallItem),
+    /// Custom tool call output
+    CustomToolCallOutput(CustomToolCallOutputItem),
+    /// Tool search output
+    ToolSearchOutput(ToolSearchOutputItem),
+    /// Web search call
+    WebSearchCall(WebSearchCallItem),
+    /// Image generation call
+    ImageGenerationCall(ImageGenerationCallItem),
+    /// MCP tool call output
+    McpToolCallOutput(McpToolCallOutputItem),
 }
 
 /// Message input item
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageItem {
+    /// Optional ID of the message
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
     /// The role of the message
     pub role: String,
 
     /// The content of the message
     pub content: Vec<ContentBlock>,
+
+    /// Whether this is the end of the turn
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_turn: Option<bool>,
+
+    /// The phase of the message (commentary or final answer)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<MessagePhase>,
 }
 
 /// Reasoning input item
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReasoningItem {
-    /// The reasoning/thinking content
-    pub reasoning: String,
+    /// Optional ID of the reasoning
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 
-    /// The type of reasoning (e.g., "summary")
-    #[serde(default)]
-    pub summary: Option<String>,
+    /// The reasoning/thinking content (encrypted in some cases)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encrypted_content: Option<String>,
+
+    /// Summary of reasoning steps
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub summary: Vec<ReasoningSummaryPart>,
+
+    /// Plain text reasoning content (for compatibility)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+}
+
+/// A reasoning summary part
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasoningSummaryPart {
+    /// The summary text
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+
+    /// The type of summary part
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_type: Option<String>,
 }
 
 /// Function call input item
@@ -140,16 +200,306 @@ pub struct FunctionCallOutputItem {
     pub output: String,
 }
 
+// ============================================================================
+// Non-Function Tool Types (Codex CLI Protocol)
+// ============================================================================
+
+/// Local shell call item (computer_use tool)
+/// Emitted when the model wants to execute a shell command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalShellCallItem {
+    /// Optional ID (legacy field)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Call ID for the shell call
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
+
+    /// Status of the call (in_progress, completed, failed)
+    pub status: String,
+
+    /// The action to perform
+    pub action: LocalShellAction,
+}
+
+/// Local shell action definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalShellAction {
+    /// Type of action (exec, read, write, etc.)
+    #[serde(rename = "type")]
+    pub action_type: String,
+
+    /// Command to execute (for exec type)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+
+    /// Arguments for the command
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<Vec<String>>,
+
+    /// Working directory
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_dir: Option<String>,
+
+    /// Timeout in milliseconds
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+
+    /// File path (for read/write types)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+
+    /// Content to write (for write type)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+}
+
+/// Tool search call item (file_search tool)
+/// Emitted when the model searches for available tools
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolSearchCallItem {
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Call ID for the search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
+
+    /// Status of the search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+
+    /// Execution mode: "client" or "remote"
+    pub execution: String,
+
+    /// Search arguments
+    #[serde(default)]
+    pub arguments: serde_json::Value,
+}
+
+/// Custom tool call item
+/// Emitted when the model calls a custom (non-function) tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomToolCallItem {
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Call ID for the custom tool call
+    pub call_id: String,
+
+    /// Status of the call
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+
+    /// Name of the custom tool
+    pub name: String,
+
+    /// Input to the tool (JSON string)
+    pub input: String,
+}
+
+/// Custom tool call output item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomToolCallOutputItem {
+    /// Call ID that this output corresponds to
+    pub call_id: String,
+
+    /// Name of the tool (optional)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    /// Output from the tool
+    pub output: FunctionCallOutputPayload,
+}
+
+/// Tool search output item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolSearchOutputItem {
+    /// Call ID for the search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
+
+    /// Status of the search
+    pub status: String,
+
+    /// Execution mode
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<String>,
+
+    /// Tools found in the search
+    #[serde(default)]
+    pub tools: Vec<ToolDefinition>,
+}
+
+/// Tool definition returned by tool search
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDefinition {
+    /// ID of the tool
+    pub id: String,
+
+    /// Name of the tool
+    pub name: String,
+
+    /// Description of the tool
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    /// Parameters schema
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<serde_json::Value>,
+}
+
+/// Web search call item
+/// Emitted when the model triggers a web search
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSearchCallItem {
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Status of the search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+
+    /// The search action
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<WebSearchAction>,
+}
+
+/// Web search action definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSearchAction {
+    /// Type of action (search)
+    #[serde(rename = "type")]
+    pub action_type: String,
+
+    /// Search query
+    pub query: String,
+}
+
+/// Image generation call item
+/// Emitted when the model triggers image generation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageGenerationCallItem {
+    /// ID of the image generation call
+    pub id: String,
+
+    /// Status of the generation
+    pub status: String,
+
+    /// Revised prompt used for generation
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revised_prompt: Option<String>,
+
+    /// The generated image result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<String>,
+}
+
+/// MCP tool call output item
+/// Emitted as the result of an MCP tool call
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolCallOutputItem {
+    /// Call ID that this output corresponds to
+    pub call_id: String,
+
+    /// The result from the MCP tool
+    pub output: McpToolResult,
+}
+
+/// MCP tool result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolResult {
+    /// Content items from the tool
+    pub content: Vec<McpContent>,
+
+    /// Whether this is an error
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_error: Option<bool>,
+}
+
+/// MCP content item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum McpContent {
+    /// Text content
+    Text { text: String },
+    /// Image content
+    Image { data: String, mime_type: String },
+    /// Resource content
+    Resource { resource: McpResource },
+}
+
+/// MCP resource
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResource {
+    /// URI of the resource
+    pub uri: String,
+
+    /// Name of the resource
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    /// MIME type of the resource
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+
+    /// Text content
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+/// Function call output payload
+/// Supports both text and structured content
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum FunctionCallOutputPayload {
+    /// Plain text output
+    Text(String),
+    /// Structured content items
+    ContentItems(Vec<FunctionCallOutputContentItem>),
+}
+
+/// Function call output content item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FunctionCallOutputContentItem {
+    /// Text content
+    Text { text: String },
+    /// Image content
+    Image { image_url: String },
+}
+
 /// Content block in a message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     /// Input text content
     InputText(InputText),
-    /// Image content
+    /// Input image content (Codex CLI compatible)
+    InputImage(InputImage),
+    /// Image content (legacy alias for InputImage)
     Image(ImageContent),
     /// Output text content
     OutputText(OutputText),
+    /// Refusal content
+    Refusal(RefusalContent),
 }
 
 /// Input text content
@@ -158,6 +508,40 @@ pub enum ContentBlock {
 pub struct InputText {
     /// The text content
     pub text: String,
+}
+
+/// Input image content (Codex CLI style)
+/// Simplified structure matching the Codex CLI protocol
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InputImage {
+    /// The image URL (can be a data: URL or https: URL)
+    pub image_url: String,
+
+    /// Detail level for the image
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<ImageDetail>,
+}
+
+/// Image detail level
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageDetail {
+    /// Auto (default)
+    #[default]
+    Auto,
+    /// Low detail
+    Low,
+    /// High detail
+    High,
+}
+
+/// Refusal content
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefusalContent {
+    /// The refusal message
+    pub refusal: String,
 }
 
 /// Image content
@@ -437,6 +821,22 @@ pub enum OutputItem {
     Reasoning(ReasoningOutput),
     /// Function call output
     FunctionCall(FunctionCallOutput),
+    /// Local shell call output (computer_use)
+    LocalShellCall(LocalShellCallOutput),
+    /// Tool search call output (file_search)
+    ToolSearchCall(ToolSearchCallOutput),
+    /// Custom tool call output
+    CustomToolCall(CustomToolCallOutput),
+    /// Custom tool call output result
+    CustomToolCallOutput(CustomToolCallOutputResult),
+    /// Tool search output result
+    ToolSearchOutput(ToolSearchOutputResult),
+    /// Web search call output
+    WebSearchCall(WebSearchCallOutput),
+    /// Image generation call output
+    ImageGenerationCall(ImageGenerationCallOutput),
+    /// MCP tool call output
+    McpToolCallOutput(McpToolCallOutputResult),
 }
 
 /// Message output item
@@ -446,6 +846,10 @@ pub struct MessageOutput {
     /// Index of the output item
     pub index: u32,
 
+    /// Optional ID of the message
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
     /// The role of the message
     pub role: String,
 
@@ -453,11 +857,19 @@ pub struct MessageOutput {
     pub content: Vec<ContentBlock>,
 
     /// Status of the message
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
 
+    /// Whether this is the end of the turn
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_turn: Option<bool>,
+
+    /// Phase of the message (commentary or final_answer)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<MessagePhase>,
+
     /// Tool calls made in this message
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCallOutput>>,
 }
 
@@ -487,35 +899,40 @@ pub struct FunctionCallOutputFunction {
     pub arguments: String,
 }
 
-/// Reasoning output item
+// ============================================================================
+// Additional Output Types for Codex CLI Protocol
+// ============================================================================
+
+/// Reasoning output item (enhanced)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReasoningOutput {
     /// Index of the output item
     pub index: u32,
 
-    /// The reasoning content
-    pub reasoning: String,
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 
-    /// Summary of the reasoning
-    #[serde(default)]
-    pub summary: Option<Vec<ReasoningSummary>>,
+    /// Encrypted reasoning content (for some providers)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encrypted_content: Option<String>,
+
+    /// Summary of reasoning steps
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub summary: Vec<ReasoningSummaryPart>,
 }
 
-/// Reasoning summary
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReasoningSummary {
-    /// The summary text
-    pub summary: String,
-}
-
-/// Function call output item
+/// Function call output item (enhanced)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FunctionCallOutput {
     /// Index of the output item
     pub index: u32,
+
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 
     /// ID of the function call
     pub call_id: String,
@@ -523,118 +940,229 @@ pub struct FunctionCallOutput {
     /// The name of the function
     pub name: String,
 
-    /// The arguments for the function
+    /// The arguments for the function (JSON string)
     pub arguments: String,
+
+    /// Status of the call
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
 }
 
-/// Usage statistics
+/// Local shell call output item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalShellCallOutput {
+    /// Index of the output item
+    pub index: u32,
+
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Call ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
+
+    /// Status of the call
+    pub status: String,
+
+    /// The action that was performed
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<LocalShellAction>,
+}
+
+/// Tool search call output item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolSearchCallOutput {
+    /// Index of the output item
+    pub index: u32,
+
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Call ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
+
+    /// Status of the search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+
+    /// Execution mode
+    pub execution: String,
+
+    /// Search arguments
+    #[serde(default)]
+    pub arguments: serde_json::Value,
+}
+
+/// Custom tool call output item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomToolCallOutput {
+    /// Index of the output item
+    pub index: u32,
+
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Call ID
+    pub call_id: String,
+
+    /// Status of the call
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+
+    /// Name of the custom tool
+    pub name: String,
+
+    /// Input to the tool (JSON string)
+    pub input: String,
+}
+
+/// Custom tool call output result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomToolCallOutputResult {
+    /// Index of the output item
+    pub index: u32,
+
+    /// Call ID that this output corresponds to
+    pub call_id: String,
+
+    /// Name of the tool (optional)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    /// Output from the tool
+    pub output: FunctionCallOutputPayload,
+}
+
+/// Tool search output result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolSearchOutputResult {
+    /// Index of the output item
+    pub index: u32,
+
+    /// Call ID for the search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
+
+    /// Status of the search
+    pub status: String,
+
+    /// Execution mode
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<String>,
+
+    /// Tools found in the search
+    #[serde(default)]
+    pub tools: Vec<ToolDefinition>,
+}
+
+/// Web search call output item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSearchCallOutput {
+    /// Index of the output item
+    pub index: u32,
+
+    /// Optional ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+
+    /// Status of the search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+
+    /// The search action
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<WebSearchAction>,
+}
+
+/// Image generation call output item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageGenerationCallOutput {
+    /// Index of the output item
+    pub index: u32,
+
+    /// ID of the image generation call
+    pub id: String,
+
+    /// Status of the generation
+    pub status: String,
+
+    /// Revised prompt used for generation
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revised_prompt: Option<String>,
+
+    /// The generated image result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<String>,
+}
+
+/// MCP tool call output result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolCallOutputResult {
+    /// Index of the output item
+    pub index: u32,
+
+    /// Call ID that this output corresponds to
+    pub call_id: String,
+
+    /// The result from the MCP tool
+    pub output: McpToolResult,
+}
+
+// ============================================================================
+// Enhanced Usage Statistics
+// ============================================================================
+
+/// Usage statistics (enhanced with detailed token info)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Usage {
     /// Number of tokens in the input
-    pub input_tokens: u32,
+    pub input_tokens: u64,
+
+    /// Detailed input token breakdown
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_tokens_details: Option<InputTokensDetails>,
 
     /// Number of tokens in the output
-    pub output_tokens: u32,
+    pub output_tokens: u64,
 
-    /// Number of tokens in the reasoning
-    #[serde(default)]
-    pub tokens: Option<u32>,
+    /// Detailed output token breakdown
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_tokens_details: Option<OutputTokensDetails>,
 
     /// Total number of tokens
-    pub total_tokens: u32,
+    pub total_tokens: u64,
 }
 
-/// Streaming response chunk
+/// Detailed input token information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResponsesStreamChunk {
-    /// Unique identifier
-    pub id: String,
-
-    /// Object type
-    pub object: String,
-
-    /// Unix timestamp
-    pub created: u64,
-
-    /// Model used
-    pub model: String,
-
-    /// Output items in the chunk
-    #[serde(default)]
-    pub output: Vec<StreamOutputItem>,
-
-    /// Usage in the chunk
-    #[serde(default)]
-    pub usage: Option<Usage>,
+pub struct InputTokensDetails {
+    /// Tokens served from cache
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
 }
 
-/// Stream output item
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum StreamOutputItem {
-    /// Message delta
-    Message(StreamMessageDelta),
-    /// Reasoning delta
-    Reasoning(StreamReasoningDelta),
-    /// Function call delta
-    FunctionCall(StreamFunctionCallDelta),
-}
-
-/// Stream message delta
+/// Detailed output token information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StreamMessageDelta {
-    /// Index
-    pub index: u32,
-
-    /// Delta content
-    #[serde(default)]
-    pub delta: Option<MessageDelta>,
-
-    /// Status
-    #[serde(default)]
-    pub status: Option<String>,
+pub struct OutputTokensDetails {
+    /// Tokens used for reasoning
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u64>,
 }
 
-/// Message delta
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MessageDelta {
-    /// Role
-    #[serde(default)]
-    pub role: Option<String>,
-
-    /// Content
-    #[serde(default)]
-    pub content: Option<String>,
-
-    /// Tool calls
-    #[serde(default)]
-    pub tool_calls: Option<Vec<ToolCallOutput>>,
-}
-
-/// Stream reasoning delta
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StreamReasoningDelta {
-    /// Index
-    pub index: u32,
-
-    /// Delta reasoning
-    #[serde(default)]
-    pub delta: Option<String>,
-}
-
-/// Stream function call delta
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StreamFunctionCallDelta {
-    /// Index
-    pub index: u32,
-
-    /// Delta arguments
-    #[serde(default)]
-    pub delta: Option<String>,
-}
+/// Detailed usage statistics (alias for Usage with detailed info)
+pub type DetailedUsage = Usage;

@@ -30,16 +30,60 @@ use crate::models::response::{
 /// Transform Chat Completions Request → Responses API Request
 #[allow(dead_code)]
 pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesRequest {
+    // Extract system message as instructions
+    let instructions = chat_req
+        .messages
+        .iter()
+        .find(|m| m.role == "system")
+        .and_then(|m| m.content.clone());
+
+    // Convert messages, filtering out system (extracted as instructions above)
     let input: Vec<Item> = chat_req
         .messages
         .iter()
-        .map(|msg| {
-            Item::Message(MessageItem {
-                role: msg.role.clone(),
-                content: vec![ContentBlock::InputText(InputText {
-                    text: msg.content.clone().unwrap_or_default(),
-                })],
-            })
+        .filter(|m| m.role != "system")
+        .flat_map(|msg| {
+            let mut items = Vec::new();
+
+            // Handle text content
+            if let Some(content) = &msg.content {
+                if !content.is_empty() {
+                    items.push(Item::Message(MessageItem {
+                        id: None,
+                        role: msg.role.clone(),
+                        content: vec![ContentBlock::InputText(InputText {
+                            text: content.clone(),
+                        })],
+                        end_turn: None,
+                        phase: None,
+                    }));
+                }
+            }
+
+            // Handle tool calls as separate items
+            if let Some(tool_calls) = &msg.tool_calls {
+                for tc in tool_calls {
+                    items.push(Item::FunctionCall(crate::models::response::FunctionCallItem {
+                        call_id: tc.id.clone(),
+                        name: tc.function.name.clone(),
+                        arguments: tc.function.arguments.clone(),
+                    }));
+                }
+            }
+
+            // Handle tool call outputs
+            if let Some(tool_call_id) = &msg.tool_call_id {
+                if let Some(content) = &msg.content {
+                    items.push(Item::FunctionCallOutput(
+                        crate::models::response::FunctionCallOutputItem {
+                            call_id: tool_call_id.clone(),
+                            output: content.clone(),
+                        },
+                    ));
+                }
+            }
+
+            items
         })
         .collect();
 
@@ -57,7 +101,7 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
                             name: Some(f.name.clone()),
                             description: f.description.clone(),
                             parameters: f.parameters.clone(),
-                            strict: Some(true),  // Responses API defaults to strict
+                            strict: Some(true), // Responses API defaults to strict
                         }),
                         // Non-function tool fields default to None
                         vector_store_ids: None,
@@ -77,7 +121,7 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
     ResponsesRequest {
         model: chat_req.model.clone(),
         input,
-        instructions: None,
+        instructions,
         tools,
         temperature: chat_req.temperature,
         top_p: chat_req.top_p,
@@ -112,37 +156,214 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
 
 /// Transform Responses API Request → Chat Completions Request
 pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> ChatRequest {
-    let messages: Vec<ChatMessage> = responses_req
-        .input
-        .iter()
-        .filter_map(|item| match item {
-            Item::Message(msg) => Some(ChatMessage {
-                role: msg.role.clone(),
-                content: msg.content.iter().find_map(|c| match c {
-                    ContentBlock::InputText(text) => Some(text.text.clone()),
-                    _ => None,
-                }),
+    let mut messages = Vec::new();
+
+    // Add instructions as system message
+    if let Some(ref instructions) = responses_req.instructions {
+        if !instructions.is_empty() {
+            messages.push(ChatMessage {
+                role: "system".to_string(),
+                content: Some(instructions.clone()),
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
-            }),
-            Item::FunctionCall(func) => Some(ChatMessage {
-                role: "assistant".to_string(),
-                content: None,
-                name: None,
-                tool_calls: Some(vec![crate::models::chat::ToolCall {
-                    id: func.call_id.clone(),
-                    call_type: "function".to_string(),
-                    function: crate::models::chat::FunctionCall {
-                        name: func.name.clone(),
-                        arguments: func.arguments.clone(),
-                    },
-                }]),
-                tool_call_id: None,
-            }),
-            _ => None,
-        })
-        .collect();
+            });
+        }
+    }
+
+    // Convert all item types
+    for item in &responses_req.input {
+        match item {
+            Item::Message(msg) => {
+                // Extract content from all content blocks
+                let content = msg
+                    .content
+                    .iter()
+                    .find_map(|c| match c {
+                        ContentBlock::InputText(text) => Some(text.text.clone()),
+                        ContentBlock::InputImage(img) => {
+                            Some(format!("[Image: {}]", img.image_url))
+                        }
+                        ContentBlock::OutputText(text) => Some(text.text.clone()),
+                        ContentBlock::Refusal(refusal) => Some(refusal.refusal.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+
+                messages.push(ChatMessage {
+                    role: msg.role.clone(),
+                    content: Some(content),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                });
+            }
+            Item::FunctionCall(func) => {
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    tool_calls: Some(vec![crate::models::chat::ToolCall {
+                        id: func.call_id.clone(),
+                        call_type: "function".to_string(),
+                        function: crate::models::chat::FunctionCall {
+                            name: func.name.clone(),
+                            arguments: func.arguments.clone(),
+                        },
+                    }]),
+                    tool_call_id: None,
+                });
+            }
+            Item::FunctionCallOutput(output) => {
+                messages.push(ChatMessage {
+                    role: "tool".to_string(),
+                    content: Some(output.output.clone()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: Some(output.call_id.clone()),
+                });
+            }
+            Item::Reasoning(reasoning) => {
+                // Convert reasoning to assistant message
+                let content = reasoning
+                    .reasoning
+                    .clone()
+                    .or(reasoning.summary.iter().map(|s| s.text.clone()).next())
+                    .unwrap_or_default();
+
+                if !content.is_empty() {
+                    messages.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: Some(content),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
+                }
+            }
+            Item::LocalShellCall(shell) => {
+                // Convert local shell call to tool call
+                let args = serde_json::to_string(&shell.action).unwrap_or_default();
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    tool_calls: Some(vec![crate::models::chat::ToolCall {
+                        id: shell.call_id.clone().unwrap_or_default(),
+                        call_type: "function".to_string(),
+                        function: crate::models::chat::FunctionCall {
+                            name: format!("shell_{}", shell.action.action_type),
+                            arguments: args,
+                        },
+                    }]),
+                    tool_call_id: None,
+                });
+            }
+            Item::ToolSearchCall(search) => {
+                // Convert tool search to function call
+                let args = serde_json::to_string(&search.arguments).unwrap_or_default();
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    tool_calls: Some(vec![crate::models::chat::ToolCall {
+                        id: search.call_id.clone().unwrap_or_default(),
+                        call_type: "function".to_string(),
+                        function: crate::models::chat::FunctionCall {
+                            name: "tool_search".to_string(),
+                            arguments: args,
+                        },
+                    }]),
+                    tool_call_id: None,
+                });
+            }
+            Item::CustomToolCall(custom) => {
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    tool_calls: Some(vec![crate::models::chat::ToolCall {
+                        id: custom.call_id.clone(),
+                        call_type: "function".to_string(),
+                        function: crate::models::chat::FunctionCall {
+                            name: custom.name.clone(),
+                            arguments: custom.input.clone(),
+                        },
+                    }]),
+                    tool_call_id: None,
+                });
+            }
+            Item::CustomToolCallOutput(output) => {
+                let content = match &output.output {
+                    crate::models::response::FunctionCallOutputPayload::Text(t) => t.clone(),
+                    crate::models::response::FunctionCallOutputPayload::ContentItems(items) => {
+                        items
+                            .iter()
+                            .filter_map(|i| match i {
+                                crate::models::response::FunctionCallOutputContentItem::Text(t) => {
+                                    Some(t.text.clone())
+                                }
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    }
+                };
+                messages.push(ChatMessage {
+                    role: "tool".to_string(),
+                    content: Some(content),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: Some(output.call_id.clone()),
+                });
+            }
+            Item::WebSearchCall(web_search) => {
+                if let Some(action) = &web_search.action {
+                    messages.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: None,
+                        name: None,
+                        tool_calls: Some(vec![crate::models::chat::ToolCall {
+                            id: web_search.id.clone().unwrap_or_default(),
+                            call_type: "function".to_string(),
+                            function: crate::models::chat::FunctionCall {
+                                name: "web_search".to_string(),
+                                arguments: serde_json::to_string(&serde_json::json!({
+                                    "query": action.query
+                                }))
+                                .unwrap_or_default(),
+                            },
+                        }]),
+                        tool_call_id: None,
+                    });
+                }
+            }
+            Item::McpToolCallOutput(mcp_output) => {
+                let content = mcp_output
+                    .output
+                    .content
+                    .iter()
+                    .filter_map(|c| match c {
+                        crate::models::response::McpContent::Text(t) => Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                messages.push(ChatMessage {
+                    role: "tool".to_string(),
+                    content: Some(content),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: Some(mcp_output.call_id.clone()),
+                });
+            }
+            // Skip other types that don't map to Chat API
+            _ => {
+                tracing::debug!("Skipping item type in Responses → Chat conversion");
+            }
+        }
+    }
 
     let tools = if responses_req.tools.is_empty() {
         None

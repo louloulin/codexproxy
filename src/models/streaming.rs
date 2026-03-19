@@ -4,6 +4,15 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::response::{
+    DetailedUsage, FunctionCallOutputPayload, InputTokensDetails, McpContent, McpToolResult,
+    OutputItem, OutputTokensDetails, ReasoningSummaryPart, ToolDefinition,
+};
+
+// ============================================================================
+// Chat Completions Streaming (Legacy)
+// ============================================================================
+
 /// Chat Completions streaming chunk
 /// This is sent as SSE data for streaming responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,4 +192,256 @@ impl StreamingResponseBuilder {
             }],
         }
     }
+}
+
+// ============================================================================
+// Responses API Streaming Events (Codex CLI Protocol)
+// ============================================================================
+
+/// Streaming events for Responses API
+/// Based on Codex CLI protocol
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResponseEvent {
+    /// Response created event
+    #[serde(rename = "response.created")]
+    Created {
+        /// Response ID
+        id: String,
+        /// Object type
+        object: String,
+        /// Creation timestamp
+        created: u64,
+        /// Model used
+        model: String,
+    },
+
+    /// Output item added event
+    #[serde(rename = "response.output_item.added")]
+    OutputItemAdded {
+        /// Index of the output item
+        output_index: u32,
+        /// The output item
+        item: OutputItem,
+    },
+
+    /// Output item done event
+    #[serde(rename = "response.output_item.done")]
+    OutputItemDone {
+        /// Index of the output item
+        output_index: u32,
+        /// The completed output item
+        item: OutputItem,
+    },
+
+    /// Content part added event
+    #[serde(rename = "response.content_part.added")]
+    ContentPartAdded {
+        /// Index of the output item
+        output_index: u32,
+        /// Index of the content part
+        content_index: u32,
+        /// The content part type
+        part: ContentPartType,
+    },
+
+    /// Output text delta event
+    #[serde(rename = "response.output_text.delta")]
+    OutputTextDelta {
+        /// Index of the output item
+        output_index: u32,
+        /// Index of the content part
+        content_index: Option<u32>,
+        /// The text delta
+        delta: String,
+    },
+
+    /// Output text done event
+    #[serde(rename = "response.output_text.done")]
+    OutputTextDone {
+        /// Index of the output item
+        output_index: u32,
+        /// The complete text
+        text: String,
+    },
+
+    /// Reasoning summary part added event
+    #[serde(rename = "response.reasoning_summary_part.added")]
+    ReasoningSummaryPartAdded {
+        /// Index of the reasoning item
+        output_index: u32,
+        /// Index of the summary part
+        summary_index: u32,
+    },
+
+    /// Reasoning summary text delta event
+    #[serde(rename = "response.reasoning_summary_text.delta")]
+    ReasoningSummaryTextDelta {
+        /// Index of the reasoning item
+        output_index: u32,
+        /// Index of the summary part
+        summary_index: u32,
+        /// The text delta
+        delta: String,
+    },
+
+    /// Reasoning summary text done event
+    #[serde(rename = "response.reasoning_summary_text.done")]
+    ReasoningSummaryTextDone {
+        /// Index of the reasoning item
+        output_index: u32,
+        /// Index of the summary part
+        summary_index: u32,
+        /// The complete text
+        text: String,
+    },
+
+    /// Function call arguments delta event
+    #[serde(rename = "response.function_call_arguments.delta")]
+    FunctionCallArgumentsDelta {
+        /// Index of the output item
+        output_index: u32,
+        /// Call ID
+        call_id: String,
+        /// The arguments delta
+        delta: String,
+    },
+
+    /// Function call arguments done event
+    #[serde(rename = "response.function_call_arguments.done")]
+    FunctionCallArgumentsDone {
+        /// Index of the output item
+        output_index: u32,
+        /// Call ID
+        call_id: String,
+        /// The complete arguments
+        arguments: String,
+    },
+
+    /// Response completed event
+    #[serde(rename = "response.completed")]
+    Completed {
+        /// Response ID
+        response_id: String,
+        /// Token usage statistics
+        token_usage: Option<DetailedUsage>,
+    },
+
+    /// Response failed event
+    #[serde(rename = "response.failed")]
+    Failed {
+        /// Response ID
+        response_id: String,
+        /// Error information
+        error: ResponseError,
+    },
+
+    /// Response incomplete event
+    #[serde(rename = "response.incomplete")]
+    Incomplete {
+        /// Response ID
+        response_id: String,
+        /// Reason for incompleteness
+        reason: String,
+    },
+
+    /// Rate limits updated event
+    #[serde(rename = "response.rate_limits")]
+    RateLimits {
+        /// Rate limit snapshot
+        rate_limits: RateLimitSnapshot,
+    },
+
+    /// Server model event
+    #[serde(rename = "response.server_model")]
+    ServerModel {
+        /// Model name
+        model: String,
+    },
+
+    /// Server reasoning included event
+    #[serde(rename = "response.server_reasoning_included")]
+    ServerReasoningIncluded {
+        /// Whether reasoning is included
+        included: bool,
+    },
+
+    /// Models etag event
+    #[serde(rename = "response.models_etag")]
+    ModelsEtag {
+        /// Etag value
+        etag: String,
+    },
+}
+
+/// Content part type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentPartType {
+    /// Output text
+    OutputText,
+    /// Input image
+    InputImage,
+    /// Refusal
+    Refusal,
+}
+
+/// Response error information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseError {
+    /// Error code
+    pub code: String,
+    /// Error message
+    pub message: String,
+}
+
+/// Rate limit snapshot
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateLimitSnapshot {
+    /// Number of requests remaining
+    pub requests_remaining: u64,
+    /// Number of tokens remaining
+    pub tokens_remaining: u64,
+    /// Total request limit
+    pub requests_limit: u64,
+    /// Total token limit
+    pub tokens_limit: u64,
+    /// Time until reset (seconds)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_after_seconds: Option<u64>,
+}
+
+/// Detailed usage statistics (alias for response module type)
+pub type StreamUsage = DetailedUsage;
+
+// ============================================================================
+// SSE Event Parsing
+// ============================================================================
+
+/// Parse a Responses API SSE event from raw data
+#[allow(dead_code)]
+pub fn parse_responses_sse_event(data: &str) -> Result<Option<ResponseEvent>, serde_json::Error> {
+    // Skip empty data or [DONE] marker
+    if data.is_empty() || data == "[DONE]" {
+        return Ok(None);
+    }
+
+    serde_json::from_str(data).map(Some)
+}
+
+/// Build an SSE event string from a ResponseEvent
+#[allow(dead_code)]
+pub fn build_sse_event(event: &ResponseEvent) -> String {
+    format!(
+        "data: {}\n\n",
+        serde_json::to_string(event).unwrap_or_default()
+    )
+}
+
+/// Build a [DONE] SSE event
+#[allow(dead_code)]
+pub fn build_done_event() -> String {
+    "data: [DONE]\n\n".to_string()
 }
