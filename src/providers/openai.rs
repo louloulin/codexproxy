@@ -9,7 +9,12 @@ use serde_json::Value;
 use crate::config::ProviderConfig;
 use crate::models::{ChatRequest, ChatResponse};
 
-use super::{parse_provider_error, LLMProvider, ProviderError, StreamingChat};
+use super::{
+    build_http_client, current_proxy_env_summary, extract_provider_error_details,
+    format_request_body_for_log,
+    parse_provider_error, summarize_chat_request, summarize_response_headers, truncate_for_log,
+    LLMProvider, ProviderError, StreamingChat,
+};
 
 /// OpenAI Provider
 pub struct OpenAIProvider {
@@ -20,10 +25,7 @@ pub struct OpenAIProvider {
 impl OpenAIProvider {
     /// Create a new OpenAI provider
     pub fn new(config: ProviderConfig) -> Self {
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(config.timeout))
-            .build()
-            .expect("Failed to create HTTP client");
+        let client = build_http_client(config.timeout);
 
         Self { config, client }
     }
@@ -59,6 +61,23 @@ impl LLMProvider for OpenAIProvider {
         // Serialize request
         let request_body = serde_json::to_value(&request)
             .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
+        let request_body_text = serde_json::to_string(&request_body)
+            .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
+
+        tracing::info!(
+            provider = self.name(),
+            url = %url,
+            base_url = %self.config.base_url,
+            model = %request.model,
+            proxy_env = %current_proxy_env_summary(),
+            request_summary = %summarize_chat_request(&request),
+            "provider chat request"
+        );
+        tracing::debug!(
+            provider = self.name(),
+            request_body = %format_request_body_for_log(&request_body_text),
+            "provider chat request body"
+        );
 
         // Make request
         let response = self
@@ -72,10 +91,23 @@ impl LLMProvider for OpenAIProvider {
             .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
 
         let status = response.status();
+        let response_headers = summarize_response_headers(response.headers());
         let body = response
             .text()
             .await
             .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
+        let upstream_error = extract_provider_error_details(&body);
+
+        tracing::info!(
+            provider = self.name(),
+            url = %url,
+            status = %status,
+            model = %request.model,
+            response_headers = %response_headers,
+            upstream_error = ?upstream_error,
+            response_body = %truncate_for_log(&body, 4000),
+            "provider chat response"
+        );
 
         if !status.is_success() {
             return Err(parse_provider_error(status, &body));
@@ -103,6 +135,24 @@ impl LLMProvider for OpenAIProvider {
             obj.insert("stream".to_string(), serde_json::Value::Bool(true));
         }
 
+        let request_body_text = serde_json::to_string(&request_body)
+            .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
+
+        tracing::info!(
+            provider = self.name(),
+            url = %url,
+            base_url = %self.config.base_url,
+            model = %request.model,
+            proxy_env = %current_proxy_env_summary(),
+            request_summary = %summarize_chat_request(&request),
+            "provider streaming request"
+        );
+        tracing::debug!(
+            provider = self.name(),
+            request_body = %format_request_body_for_log(&request_body_text),
+            "provider streaming request body"
+        );
+
         // Make request
         let response = self
             .client
@@ -115,12 +165,24 @@ impl LLMProvider for OpenAIProvider {
             .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
 
         let status = response.status();
+        let response_headers = summarize_response_headers(response.headers());
 
         if !status.is_success() {
             let body = response
                 .text()
                 .await
                 .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
+            let upstream_error = extract_provider_error_details(&body);
+            tracing::info!(
+                provider = self.name(),
+                url = %url,
+                status = %status,
+                model = %request.model,
+                response_headers = %response_headers,
+                upstream_error = ?upstream_error,
+                response_body = %truncate_for_log(&body, 4000),
+                "provider streaming response"
+            );
             return Err(parse_provider_error(status, &body));
         }
 

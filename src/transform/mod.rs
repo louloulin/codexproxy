@@ -21,11 +21,14 @@ use crate::models::chat::{
     Usage as ChatUsage,
 };
 use crate::models::response::ResponsesStreamChunk;
-use crate::models::response::StreamOutputItem;
 use crate::models::response::{
     ContentBlock, FunctionCallOutputFunction, InputText, Item, MessageItem, OutputItem,
     ResponsesRequest, ResponsesResponse, ToolCallOutput, Usage as ResponsesUsage,
 };
+
+fn usage_u64_to_u32(value: u64) -> u32 {
+    u32::try_from(value).unwrap_or(u32::MAX)
+}
 
 /// Transform Chat Completions Request → Responses API Request
 #[allow(dead_code)]
@@ -63,11 +66,13 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
             // Handle tool calls as separate items
             if let Some(tool_calls) = &msg.tool_calls {
                 for tc in tool_calls {
-                    items.push(Item::FunctionCall(crate::models::response::FunctionCallItem {
-                        call_id: tc.id.clone(),
-                        name: tc.function.name.clone(),
-                        arguments: tc.function.arguments.clone(),
-                    }));
+                    items.push(Item::FunctionCall(
+                        crate::models::response::FunctionCallItem {
+                            call_id: tc.id.clone(),
+                            name: tc.function.name.clone(),
+                            arguments: tc.function.arguments.clone(),
+                        },
+                    ));
                 }
             }
 
@@ -228,7 +233,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                 let content = reasoning
                     .reasoning
                     .clone()
-                    .or(reasoning.summary.iter().map(|s| s.text.clone()).next())
+                    .or_else(|| reasoning.summary.iter().find_map(|s| s.text.clone()))
                     .unwrap_or_default();
 
                 if !content.is_empty() {
@@ -300,9 +305,9 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                         items
                             .iter()
                             .filter_map(|i| match i {
-                                crate::models::response::FunctionCallOutputContentItem::Text(t) => {
-                                    Some(t.text.clone())
-                                }
+                                crate::models::response::FunctionCallOutputContentItem::Text {
+                                    text,
+                                } => Some(text.clone()),
                                 _ => None,
                             })
                             .collect::<Vec<_>>()
@@ -344,7 +349,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                     .content
                     .iter()
                     .filter_map(|c| match c {
-                        crate::models::response::McpContent::Text(t) => Some(t.text.clone()),
+                        crate::models::response::McpContent::Text { text } => Some(text.clone()),
                         _ => None,
                     })
                     .collect::<Vec<_>>()
@@ -449,6 +454,7 @@ pub fn transform_chat_to_responses_response(chat_resp: &ChatResponse) -> Respons
 
             OutputItem::Message(crate::models::response::MessageOutput {
                 index: idx as u32,
+                id: None,
                 role: choice.message.role.clone(),
                 content: vec![ContentBlock::OutputText(
                     crate::models::response::OutputText {
@@ -457,16 +463,19 @@ pub fn transform_chat_to_responses_response(chat_resp: &ChatResponse) -> Respons
                     },
                 )],
                 status: choice.finish_reason.clone(),
+                end_turn: None,
+                phase: None,
                 tool_calls,
             })
         })
         .collect();
 
     let usage = chat_resp.usage.as_ref().map(|u| ResponsesUsage {
-        input_tokens: u.prompt_tokens,
-        output_tokens: u.completion_tokens,
-        tokens: None,
-        total_tokens: u.total_tokens,
+        input_tokens: u64::from(u.prompt_tokens),
+        input_tokens_details: None,
+        output_tokens: u64::from(u.completion_tokens),
+        output_tokens_details: None,
+        total_tokens: u64::from(u.total_tokens),
     });
 
     ResponsesResponse {
@@ -526,9 +535,9 @@ pub fn transform_responses_to_chat_response(responses_resp: &ResponsesResponse) 
         .collect();
 
     let usage = responses_resp.usage.as_ref().map(|u| ChatUsage {
-        prompt_tokens: u.input_tokens,
-        completion_tokens: u.output_tokens,
-        total_tokens: u.total_tokens,
+        prompt_tokens: usage_u64_to_u32(u.input_tokens),
+        completion_tokens: usage_u64_to_u32(u.output_tokens),
+        total_tokens: usage_u64_to_u32(u.total_tokens),
     });
 
     ChatResponse {
@@ -548,43 +557,77 @@ pub fn transform_responses_to_chat_response(responses_resp: &ResponsesResponse) 
 pub fn transform_chat_stream_to_responses_stream(
     chat_chunk: &ChatCompletionChunk,
 ) -> ResponsesStreamChunk {
-    let output: Vec<StreamOutputItem> = chat_chunk
+    let output: Vec<OutputItem> = chat_chunk
         .choices
         .iter()
         .filter_map(|choice| {
             let delta = choice.delta.as_ref()?;
-            Some(StreamOutputItem::Message(
-                crate::models::response::StreamMessageDelta {
+            let tool_calls = delta.tool_calls.as_ref().map(|calls| {
+                calls
+                    .iter()
+                    .map(|tc| ToolCallOutput {
+                        id: tc.id.clone(),
+                        call_type: tc.call_type.clone(),
+                        function: FunctionCallOutputFunction {
+                            name: tc.function.name.clone(),
+                            arguments: tc.function.arguments.clone(),
+                        },
+                    })
+                    .collect::<Vec<_>>()
+            });
+            let content = delta
+                .content
+                .as_ref()
+                .map(|text| {
+                    vec![ContentBlock::OutputText(
+                        crate::models::response::OutputText {
+                            text: text.clone(),
+                            annotations: None,
+                        },
+                    )]
+                })
+                .unwrap_or_default();
+
+            let has_tool_calls = tool_calls
+                .as_ref()
+                .map(|calls| !calls.is_empty())
+                .unwrap_or(false);
+
+            // Skip metadata-only deltas such as role announcements that carry
+            // no text, tool calls, finish reason, or usage payload.
+            if content.is_empty() && !has_tool_calls && choice.finish_reason.is_none() {
+                return None;
+            }
+
+            Some(OutputItem::Message(
+                crate::models::response::MessageOutput {
                     index: choice.index,
-                    delta: Some(crate::models::response::MessageDelta {
-                        role: delta.role.clone(),
-                        content: delta.content.clone(),
-                        tool_calls: delta.tool_calls.as_ref().map(|calls| {
-                            calls
-                                .iter()
-                                .map(|tc| ToolCallOutput {
-                                    id: tc.id.clone(),
-                                    call_type: tc.call_type.clone(),
-                                    function: FunctionCallOutputFunction {
-                                        name: tc.function.name.clone(),
-                                        arguments: tc.function.arguments.clone(),
-                                    },
-                                })
-                                .collect()
-                        }),
-                    }),
+                    id: None,
+                    role: delta
+                        .role
+                        .clone()
+                        .unwrap_or_else(|| "assistant".to_string()),
+                    content,
                     status: choice.finish_reason.clone(),
+                    end_turn: None,
+                    phase: None,
+                    tool_calls,
                 },
             ))
         })
         .collect();
 
-    // For streaming chunks, usage is typically None until the final chunk
-    let usage = None;
+    let usage = chat_chunk.usage.as_ref().map(|u| ResponsesUsage {
+        input_tokens: u64::from(u.prompt_tokens),
+        input_tokens_details: None,
+        output_tokens: u64::from(u.completion_tokens),
+        output_tokens_details: None,
+        total_tokens: u64::from(u.total_tokens),
+    });
 
     ResponsesStreamChunk {
         id: chat_chunk.id.clone(),
-        object: "response.stream".to_string(),
+        object: "response.chunk".to_string(),
         created: chat_chunk.created,
         model: chat_chunk.model.clone(),
         output,
@@ -601,14 +644,18 @@ pub fn transform_responses_stream_to_chat_stream(
         .output
         .iter()
         .filter_map(|item| match item {
-            StreamOutputItem::Message(msg) => {
-                let delta = msg.delta.as_ref()?;
+            OutputItem::Message(msg) => {
+                let content = msg.content.iter().find_map(|block| match block {
+                    ContentBlock::OutputText(text) => Some(text.text.clone()),
+                    _ => None,
+                });
+
                 Some(ChatStreamingChoice {
                     index: msg.index,
                     delta: Some(ChatDelta {
-                        role: delta.role.clone(),
-                        content: delta.content.clone(),
-                        tool_calls: delta.tool_calls.as_ref().map(|calls| {
+                        role: Some(msg.role.clone()),
+                        content,
+                        tool_calls: msg.tool_calls.as_ref().map(|calls| {
                             calls
                                 .iter()
                                 .map(|tc| ChatToolCall {
@@ -632,9 +679,9 @@ pub fn transform_responses_stream_to_chat_stream(
 
     // Convert usage from response format to chat format
     let usage = responses_chunk.usage.as_ref().map(|u| ChatUsage {
-        prompt_tokens: u.input_tokens,
-        completion_tokens: u.output_tokens,
-        total_tokens: u.total_tokens,
+        prompt_tokens: usage_u64_to_u32(u.input_tokens),
+        completion_tokens: usage_u64_to_u32(u.output_tokens),
+        total_tokens: usage_u64_to_u32(u.total_tokens),
     });
 
     ChatCompletionChunk {
@@ -695,10 +742,13 @@ mod tests {
         let responses_req = ResponsesRequest {
             model: "gpt-4".to_string(),
             input: vec![Item::Message(MessageItem {
+                id: None,
                 role: "user".to_string(),
                 content: vec![ContentBlock::InputText(InputText {
                     text: "Hello".to_string(),
                 })],
+                end_turn: None,
+                phase: None,
             })],
             instructions: None,
             tools: vec![],
@@ -770,6 +820,7 @@ mod tests {
             output: vec![OutputItem::Message(
                 crate::models::response::MessageOutput {
                     index: 0,
+                    id: None,
                     role: "assistant".to_string(),
                     content: vec![ContentBlock::OutputText(
                         crate::models::response::OutputText {
@@ -778,13 +829,16 @@ mod tests {
                         },
                     )],
                     status: Some("completed".to_string()),
+                    end_turn: None,
+                    phase: None,
                     tool_calls: None,
                 },
             )],
             usage: Some(ResponsesUsage {
                 input_tokens: 10,
+                input_tokens_details: None,
                 output_tokens: 5,
-                tokens: None,
+                output_tokens_details: None,
                 total_tokens: 15,
             }),
             finish_reason: Some("stop".to_string()),
@@ -796,6 +850,83 @@ mod tests {
         assert_eq!(chat_resp.id, "resp-123");
         assert_eq!(chat_resp.model, "gpt-4");
         assert!(chat_resp.choices.len() > 0);
+    }
+
+    #[test]
+    fn test_transform_chat_stream_to_responses_stream() {
+        let chat_chunk = ChatCompletionChunk {
+            id: "chatcmpl-123".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1234567890,
+            model: "gpt-4o".to_string(),
+            choices: vec![ChatStreamingChoice {
+                index: 0,
+                delta: Some(ChatDelta {
+                    role: Some("assistant".to_string()),
+                    content: Some("Hello".to_string()),
+                    tool_calls: None,
+                }),
+                finish_reason: Some("stop".to_string()),
+                logprobs: None,
+            }],
+            usage: Some(ChatUsage {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            }),
+        };
+
+        let responses_chunk = transform_chat_stream_to_responses_stream(&chat_chunk);
+
+        assert_eq!(responses_chunk.id, "chatcmpl-123");
+        assert_eq!(responses_chunk.model, "gpt-4o");
+        assert_eq!(responses_chunk.output.len(), 1);
+        assert_eq!(responses_chunk.usage.as_ref().unwrap().total_tokens, 15);
+
+        match &responses_chunk.output[0] {
+            OutputItem::Message(message) => {
+                assert_eq!(message.index, 0);
+                assert_eq!(message.role, "assistant");
+                let content = message
+                    .content
+                    .iter()
+                    .find_map(|block| match block {
+                        ContentBlock::OutputText(text) => Some(text.text.as_str()),
+                        _ => None,
+                    })
+                    .unwrap();
+                assert_eq!(content, "Hello");
+            }
+            other => panic!("expected message output item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_transform_chat_stream_skips_empty_metadata_only_chunk() {
+        let chat_chunk = ChatCompletionChunk {
+            id: "chatcmpl-empty".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1234567890,
+            model: "glm-5".to_string(),
+            choices: vec![ChatStreamingChoice {
+                index: 0,
+                delta: Some(ChatDelta {
+                    role: Some("assistant".to_string()),
+                    content: None,
+                    tool_calls: None,
+                }),
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+        };
+
+        let responses_chunk = transform_chat_stream_to_responses_stream(&chat_chunk);
+
+        assert!(
+            responses_chunk.output.is_empty(),
+            "metadata-only chunk should not emit an empty responses message"
+        );
     }
 
     /// Round-trip test: Chat → Responses → Chat preserves data integrity
@@ -964,7 +1095,10 @@ mod tests {
             assert!(func.parameters.is_none());
             assert!(func.strict.is_none());
         }
-        assert_eq!(tool.vector_store_ids, Some(vec!["vs_abc123".to_string(), "vs_def456".to_string()]));
+        assert_eq!(
+            tool.vector_store_ids,
+            Some(vec!["vs_abc123".to_string(), "vs_def456".to_string()])
+        );
     }
 
     #[test]
@@ -1008,7 +1142,10 @@ mod tests {
             assert!(func.strict.is_none());
         }
         assert_eq!(tool.server_label, Some("dmcp".to_string()));
-        assert_eq!(tool.server_description, Some("Dice rolling server".to_string()));
+        assert_eq!(
+            tool.server_description,
+            Some("Dice rolling server".to_string())
+        );
         assert_eq!(tool.server_url, Some("https://example.com/sse".to_string()));
         assert_eq!(tool.require_approval, Some("never".to_string()));
     }

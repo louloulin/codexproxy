@@ -2,7 +2,7 @@
 //!
 //! These models represent the new OpenAI Responses API format.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 /// Responses API Request
@@ -89,7 +89,7 @@ pub enum MessagePhase {
 }
 
 /// Input item in Responses API
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
     /// A message input item
@@ -119,7 +119,7 @@ pub enum Item {
 }
 
 /// Message input item
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageItem {
     /// Optional ID of the message
@@ -139,6 +139,109 @@ pub struct MessageItem {
     /// The phase of the message (commentary or final answer)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<MessagePhase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum TaggedItem {
+    Message(MessageItem),
+    Reasoning(ReasoningItem),
+    FunctionCall(FunctionCallItem),
+    FunctionCallOutput(FunctionCallOutputItem),
+    LocalShellCall(LocalShellCallItem),
+    ToolSearchCall(ToolSearchCallItem),
+    CustomToolCall(CustomToolCallItem),
+    CustomToolCallOutput(CustomToolCallOutputItem),
+    ToolSearchOutput(ToolSearchOutputItem),
+    WebSearchCall(WebSearchCallItem),
+    ImageGenerationCall(ImageGenerationCallItem),
+    McpToolCallOutput(McpToolCallOutputItem),
+}
+
+impl From<TaggedItem> for Item {
+    fn from(value: TaggedItem) -> Self {
+        match value {
+            TaggedItem::Message(item) => Self::Message(item),
+            TaggedItem::Reasoning(item) => Self::Reasoning(item),
+            TaggedItem::FunctionCall(item) => Self::FunctionCall(item),
+            TaggedItem::FunctionCallOutput(item) => Self::FunctionCallOutput(item),
+            TaggedItem::LocalShellCall(item) => Self::LocalShellCall(item),
+            TaggedItem::ToolSearchCall(item) => Self::ToolSearchCall(item),
+            TaggedItem::CustomToolCall(item) => Self::CustomToolCall(item),
+            TaggedItem::CustomToolCallOutput(item) => Self::CustomToolCallOutput(item),
+            TaggedItem::ToolSearchOutput(item) => Self::ToolSearchOutput(item),
+            TaggedItem::WebSearchCall(item) => Self::WebSearchCall(item),
+            TaggedItem::ImageGenerationCall(item) => Self::ImageGenerationCall(item),
+            TaggedItem::McpToolCallOutput(item) => Self::McpToolCallOutput(item),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Item {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        if value.get("type").is_some() {
+            return TaggedItem::deserialize(value)
+                .map(Into::into)
+                .map_err(serde::de::Error::custom);
+        }
+
+        MessageItem::deserialize(value)
+            .map(Self::Message)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MessageItemCompat {
+    #[serde(default)]
+    id: Option<String>,
+    role: String,
+    content: MessageContentCompat,
+    #[serde(default)]
+    end_turn: Option<bool>,
+    #[serde(default)]
+    phase: Option<MessagePhase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum MessageContentCompat {
+    Blocks(Vec<ContentBlock>),
+    Text(String),
+}
+
+impl From<MessageItemCompat> for MessageItem {
+    fn from(value: MessageItemCompat) -> Self {
+        let content = match value.content {
+            MessageContentCompat::Blocks(blocks) => blocks,
+            MessageContentCompat::Text(text) => vec![ContentBlock::InputText(InputText { text })],
+        };
+
+        Self {
+            id: value.id,
+            role: value.role,
+            content,
+            end_turn: value.end_turn,
+            phase: value.phase,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MessageItem {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        MessageItemCompat::deserialize(deserializer)
+            .map(Into::into)
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 /// Reasoning input item
@@ -487,7 +590,7 @@ pub enum FunctionCallOutputContentItem {
 }
 
 /// Content block in a message
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     /// Input text content
@@ -500,6 +603,58 @@ pub enum ContentBlock {
     OutputText(OutputText),
     /// Refusal content
     Refusal(RefusalContent),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum TaggedContentBlock {
+    InputText(InputText),
+    InputImage(InputImage),
+    Image(ImageContent),
+    OutputText(OutputText),
+    Refusal(RefusalContent),
+}
+
+impl From<TaggedContentBlock> for ContentBlock {
+    fn from(value: TaggedContentBlock) -> Self {
+        match value {
+            TaggedContentBlock::InputText(block) => Self::InputText(block),
+            TaggedContentBlock::InputImage(block) => Self::InputImage(block),
+            TaggedContentBlock::Image(block) => Self::Image(block),
+            TaggedContentBlock::OutputText(block) => Self::OutputText(block),
+            TaggedContentBlock::Refusal(block) => Self::Refusal(block),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct BareTextContentBlock {
+    text: String,
+}
+
+impl<'de> Deserialize<'de> for ContentBlock {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        if value.get("type").is_some() {
+            return TaggedContentBlock::deserialize(value)
+                .map(Into::into)
+                .map_err(serde::de::Error::custom);
+        }
+
+        if let Some(text) = value.as_str() {
+            return Ok(Self::InputText(InputText {
+                text: text.to_string(),
+            }));
+        }
+
+        BareTextContentBlock::deserialize(value)
+            .map(|block| Self::InputText(InputText { text: block.text }))
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 /// Input text content
@@ -809,6 +964,30 @@ pub struct ResponsesResponse {
     /// Additional properties
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Responses API streaming chunk
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponsesStreamChunk {
+    /// Unique identifier for the response stream
+    pub id: String,
+
+    /// The object type
+    pub object: String,
+
+    /// Unix timestamp when the chunk was created
+    pub created: u64,
+
+    /// Model used for the response
+    pub model: String,
+
+    /// Output items included in this chunk
+    pub output: Vec<OutputItem>,
+
+    /// Usage statistics, usually only present on the terminal chunk
+    #[serde(default)]
+    pub usage: Option<Usage>,
 }
 
 /// Output item from the model
@@ -1166,3 +1345,75 @@ pub struct OutputTokensDetails {
 
 /// Detailed usage statistics (alias for Usage with detailed info)
 pub type DetailedUsage = Usage;
+
+#[cfg(test)]
+mod tests {
+    use super::ResponsesRequest;
+    use serde_json::json;
+
+    #[test]
+    fn test_responses_request_accepts_message_input_without_explicit_type() {
+        let value = json!({
+            "model": "glm-5",
+            "input": [
+                {
+                    "role": "user",
+                    "content": "Hello"
+                }
+            ]
+        });
+
+        let request = serde_json::from_value::<ResponsesRequest>(value);
+
+        assert!(
+            request.is_ok(),
+            "expected request without item type to deserialize, got: {request:?}"
+        );
+    }
+
+    #[test]
+    fn test_responses_request_accepts_message_content_as_string() {
+        let value = json!({
+            "model": "glm-5",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": "Hello"
+                }
+            ]
+        });
+
+        let request = serde_json::from_value::<ResponsesRequest>(value);
+
+        assert!(
+            request.is_ok(),
+            "expected string content to deserialize, got: {request:?}"
+        );
+    }
+
+    #[test]
+    fn test_responses_request_accepts_message_content_blocks_without_explicit_type() {
+        let value = json!({
+            "model": "glm-5",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "text": "Hello"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let request = serde_json::from_value::<ResponsesRequest>(value);
+
+        assert!(
+            request.is_ok(),
+            "expected shorthand content block to deserialize, got: {request:?}"
+        );
+    }
+}

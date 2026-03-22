@@ -61,7 +61,8 @@ impl Default for ServerConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProvidersConfig {
-    pub openai: ProviderConfig,
+    #[serde(default)]
+    pub openai: Option<ProviderConfig>,
     pub zhipu: ProviderConfig,
 }
 
@@ -133,7 +134,17 @@ impl Config {
 
     fn load_env_vars(&mut self) {
         if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
-            self.providers.openai.api_key = api_key;
+            match self.providers.openai.as_mut() {
+                Some(openai) => openai.api_key = api_key,
+                None => {
+                    self.providers.openai = Some(ProviderConfig {
+                        api_key,
+                        base_url: "https://api.openai.com/v1".to_string(),
+                        default_model: "gpt-4o".to_string(),
+                        timeout: 120,
+                    });
+                }
+            }
         }
         if let Ok(api_key) = std::env::var("ZHIPU_API_KEY") {
             self.providers.zhipu.api_key = api_key;
@@ -146,12 +157,12 @@ impl Default for Config {
         Self {
             server: ServerConfig::default(),
             providers: ProvidersConfig {
-                openai: ProviderConfig {
+                openai: Some(ProviderConfig {
                     api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
                     base_url: "https://api.openai.com/v1".to_string(),
                     default_model: "gpt-4o".to_string(),
                     timeout: 120,
-                },
+                }),
                 zhipu: ProviderConfig {
                     api_key: std::env::var("ZHIPU_API_KEY").unwrap_or_default(),
                     base_url: "https://open.bigmodel.cn/api/paas/v4".to_string(),
@@ -175,9 +186,51 @@ impl ProvidersConfig {
     #[allow(dead_code)]
     pub fn get_provider(&self, name: &str) -> Option<&ProviderConfig> {
         match name {
-            "openai" => Some(&self.openai),
+            "openai" => self.openai.as_ref(),
             "zhipu" => Some(&self.zhipu),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserialize_config_with_only_zhipu_provider() {
+        let yaml = r#"
+server:
+  host: "127.0.0.1"
+  port: 9080
+
+providers:
+  zhipu:
+    api_key: "test-zhipu-key"
+    base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
+    default_model: "glm-4"
+    timeout: 60
+
+routing:
+  default: "zhipu"
+  model_mapping:
+    glm-4: "zhipu"
+
+logging:
+  level: "info"
+  format: "json"
+"#;
+
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+
+        assert!(config.providers.get_provider("openai").is_none());
+        assert_eq!(
+            config
+                .providers
+                .get_provider("zhipu")
+                .unwrap()
+                .default_model,
+            "glm-4"
+        );
     }
 }

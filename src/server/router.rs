@@ -95,7 +95,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::zhipu_chat_completions),
         )
         // Set body limit based on configuration
-        .layer(axum::extract::DefaultBodyLimit::max(config.server.body_limit))
+        .layer(axum::extract::DefaultBodyLimit::max(
+            config.server.body_limit,
+        ))
         .layer(
             ServiceBuilder::new()
                 // Request tracing with richer logs
@@ -112,12 +114,18 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                                 .get(axum::http::header::CONTENT_TYPE)
                                 .and_then(|v| v.to_str().ok())
                                 .unwrap_or("unknown");
+                            let user_agent = request
+                                .headers()
+                                .get(axum::http::header::USER_AGENT)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
                             tracing::info_span!(
                                 "http_request",
                                 method = %request.method(),
                                 uri = %request.uri(),
                                 content_length,
-                                content_type
+                                content_type,
+                                user_agent
                             )
                         })
                         .on_request(|request: &Request<_>, _span: &tracing::Span| {
@@ -131,32 +139,49 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                                 .get(axum::http::header::CONTENT_TYPE)
                                 .and_then(|v| v.to_str().ok())
                                 .unwrap_or("unknown");
+                            let user_agent = request
+                                .headers()
+                                .get(axum::http::header::USER_AGENT)
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("unknown");
                             tracing::debug!(
                                 method = %request.method(),
                                 uri = %request.uri(),
                                 content_length,
                                 content_type,
+                                user_agent,
                                 "incoming request"
                             );
                         })
-                        .on_response(|response: &Response, latency: std::time::Duration, _span: &tracing::Span| {
-                            let status = response.status();
-                            let content_length = response
-                                .headers()
-                                .get(axum::http::header::CONTENT_LENGTH)
-                                .and_then(|v| v.to_str().ok())
-                                .unwrap_or("unknown");
-                            let content_type = response
-                                .headers()
-                                .get(axum::http::header::CONTENT_TYPE)
-                                .and_then(|v| v.to_str().ok())
-                                .unwrap_or("unknown");
-                            tracing::debug!(
-                                status = %status,
+                        .on_response(
+                            |response: &Response,
+                             latency: std::time::Duration,
+                             _span: &tracing::Span| {
+                                let status = response.status();
+                                let content_length = response
+                                    .headers()
+                                    .get(axum::http::header::CONTENT_LENGTH)
+                                    .and_then(|v| v.to_str().ok())
+                                    .unwrap_or("unknown");
+                                let content_type = response
+                                    .headers()
+                                    .get(axum::http::header::CONTENT_TYPE)
+                                    .and_then(|v| v.to_str().ok())
+                                    .unwrap_or("unknown");
+                                tracing::debug!(
+                                    status = %status,
+                                    latency_ms = latency.as_millis(),
+                                    content_length,
+                                    content_type,
+                                    "response sent"
+                                );
+                            },
+                        )
+                        .on_failure(|error, latency: std::time::Duration, _span: &tracing::Span| {
+                            tracing::error!(
+                                classification = %error,
                                 latency_ms = latency.as_millis(),
-                                content_length,
-                                content_type,
-                                "response sent"
+                                "request failed during http trace"
                             );
                         }),
                 )

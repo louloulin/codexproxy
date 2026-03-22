@@ -10,19 +10,25 @@ use axum::{
 use http_body_util::BodyExt;
 use openai_proxy::{config::Config, handlers::AppState};
 use serde_json::json;
-use std::sync::Arc;
+use std::{
+    fs,
+    process::Command,
+    sync::Arc,
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tower::ServiceExt;
 
 fn create_test_config() -> Config {
     Config {
         server: openai_proxy::config::ServerConfig::default(),
         providers: openai_proxy::config::ProvidersConfig {
-            openai: openai_proxy::config::ProviderConfig {
+            openai: Some(openai_proxy::config::ProviderConfig {
                 api_key: "test-openai-key".to_string(),
                 base_url: "https://api.openai.com/v1".to_string(),
                 default_model: "gpt-4o".to_string(),
                 timeout: 60,
-            },
+            }),
             zhipu: openai_proxy::config::ProviderConfig {
                 api_key: "test-zhipu-key".to_string(),
                 base_url: "https://open.bigmodel.cn/api/paas/v4".to_string(),
@@ -45,6 +51,61 @@ fn create_app() -> axum::Router {
     let config = create_test_config();
     let state = Arc::new(AppState::new(config));
     openai_proxy::server::router::create_router(state)
+}
+
+#[test]
+fn test_binary_stays_running_after_startup() {
+    let binary =
+        std::env::var("CARGO_BIN_EXE_openai-proxy").expect("cargo should provide binary path");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!("openai-proxy-startup-{unique}"));
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let config = r#"
+server:
+  host: "127.0.0.1"
+  port: 0
+  body_limit: 10485760
+
+providers:
+  zhipu:
+    api_key: "test-zhipu-key"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    default_model: "glm-4"
+    timeout: 60
+
+routing:
+  default: "zhipu"
+  model_mapping:
+    glm-4: "zhipu"
+
+logging:
+  level: "info"
+  format: "json"
+"#;
+    fs::write(temp_dir.join("config.yaml"), config).unwrap();
+
+    let mut child = Command::new(binary)
+        .current_dir(&temp_dir)
+        .spawn()
+        .expect("binary should spawn");
+
+    thread::sleep(Duration::from_millis(500));
+
+    let status = child
+        .try_wait()
+        .expect("should be able to poll child process");
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    assert!(
+        status.is_none(),
+        "server exited during startup with status: {status:?}"
+    );
 }
 
 #[tokio::test]
@@ -329,12 +390,12 @@ async fn test_missing_provider_error() {
     let config = Config {
         server: openai_proxy::config::ServerConfig::default(),
         providers: openai_proxy::config::ProvidersConfig {
-            openai: openai_proxy::config::ProviderConfig {
+            openai: Some(openai_proxy::config::ProviderConfig {
                 api_key: "".to_string(),
                 base_url: "https://api.openai.com/v1".to_string(),
                 default_model: "gpt-4o".to_string(),
                 timeout: 60,
-            },
+            }),
             zhipu: openai_proxy::config::ProviderConfig {
                 api_key: "".to_string(),
                 base_url: "https://open.bigmodel.cn/api/paas/v4".to_string(),
@@ -1021,7 +1082,11 @@ async fn test_responses_streaming_basic() {
     let request = json!({
         "model": "gpt-4o",
         "input": [
-            {"type": "message", "role": "user", "content": "Hello"}
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Hello"}]
+            }
         ],
         "stream": true
     });
@@ -1107,7 +1172,11 @@ async fn test_responses_streaming_with_instructions() {
         "model": "gpt-4o",
         "instructions": "You are a helpful assistant",
         "input": [
-            {"type": "message", "role": "user", "content": "Hello"}
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Hello"}]
+            }
         ],
         "stream": true
     });
@@ -1233,7 +1302,11 @@ async fn test_responses_streaming_with_text_format() {
     let request = json!({
         "model": "gpt-4o",
         "input": [
-            {"type": "message", "role": "user", "content": "Generate JSON"}
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Generate JSON"}]
+            }
         ],
         "stream": true,
         "text": {

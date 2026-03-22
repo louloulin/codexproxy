@@ -42,8 +42,8 @@
 {
   "model": "gpt-4o",
   "input": [
-    {"type": "message", "role": "system", "content": "You are a helpful assistant."},
-    {"type": "message", "role": "user", "content": "Hello!"}
+    {"type": "message", "role": "system", "content": [{"type": "input_text", "text": "You are a helpful assistant."}]},
+    {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hello!"}]}
   ],
   "tools": [...],
   "text": {"format": {"type": "json_object"}}
@@ -779,8 +779,8 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 # {
 #   "model": "gpt-4o",
 #   "input": [
-#     {"type": "message", "role": "system", "content": "You are a helpful assistant."},
-#     {"type": "message", "role": "user", "content": "What is the weather in Tokyo?"}
+#     {"type": "message", "role": "system", "content": [{"type": "input_text", "text": "You are a helpful assistant."}]},
+#     {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "What is the weather in Tokyo?"}]}
 #   ],
 #   "temperature": 0.7
 # }

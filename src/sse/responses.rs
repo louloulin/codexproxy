@@ -3,13 +3,11 @@
 //! Implements parsing for Server-Sent Events from the Responses API,
 //! following the Codex CLI protocol specification.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 
 use crate::models::response::{OutputItem, Usage};
-use crate::models::streaming::{
-    ContentPartType, RateLimitSnapshot, ResponseError, ResponseEvent,
-};
+use crate::models::streaming::{ContentPartType, RateLimitSnapshot, ResponseError, ResponseEvent};
 
 /// SSE event parsing error
 #[derive(Debug, Error)]
@@ -86,18 +84,12 @@ pub fn parse_responses_sse_event(data: &str) -> Result<Option<ResponseEvent>, Ss
 
         // Reasoning events
         "response.reasoning_summary_part.added" => parse_reasoning_summary_part_added(&raw.data)?,
-        "response.reasoning_summary_text.delta" => {
-            parse_reasoning_summary_text_delta(&raw.data)?
-        }
+        "response.reasoning_summary_text.delta" => parse_reasoning_summary_text_delta(&raw.data)?,
         "response.reasoning_summary_text.done" => parse_reasoning_summary_text_done(&raw.data)?,
 
         // Function call events
-        "response.function_call_arguments.delta" => {
-            parse_function_call_arguments_delta(&raw.data)?
-        }
-        "response.function_call_arguments.done" => {
-            parse_function_call_arguments_done(&raw.data)?
-        }
+        "response.function_call_arguments.delta" => parse_function_call_arguments_delta(&raw.data)?,
+        "response.function_call_arguments.done" => parse_function_call_arguments_done(&raw.data)?,
 
         // Server info events
         "response.server_model" => parse_server_model(&raw.data)?,
@@ -112,7 +104,7 @@ pub fn parse_responses_sse_event(data: &str) -> Result<Option<ResponseEvent>, Ss
         }
     };
 
-    Ok(event)
+    Ok(Some(event))
 }
 
 // ============================================================================
@@ -255,9 +247,7 @@ struct ReasoningSummaryPartAddedData {
     summary_index: u32,
 }
 
-fn parse_reasoning_summary_part_added(
-    data: &serde_json::Value,
-) -> Result<ResponseEvent, SseError> {
+fn parse_reasoning_summary_part_added(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
     let event: ReasoningSummaryPartAddedData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::ReasoningSummaryPartAdded {
         output_index: event.output_index,
@@ -272,9 +262,7 @@ struct ReasoningSummaryTextDeltaData {
     delta: String,
 }
 
-fn parse_reasoning_summary_text_delta(
-    data: &serde_json::Value,
-) -> Result<ResponseEvent, SseError> {
+fn parse_reasoning_summary_text_delta(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
     let event: ReasoningSummaryTextDeltaData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::ReasoningSummaryTextDelta {
         output_index: event.output_index,
@@ -290,9 +278,7 @@ struct ReasoningSummaryTextDoneData {
     text: String,
 }
 
-fn parse_reasoning_summary_text_done(
-    data: &serde_json::Value,
-) -> Result<ResponseEvent, SseError> {
+fn parse_reasoning_summary_text_done(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
     let event: ReasoningSummaryTextDoneData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::ReasoningSummaryTextDone {
         output_index: event.output_index,
@@ -326,9 +312,7 @@ struct FunctionCallArgumentsDoneData {
     arguments: String,
 }
 
-fn parse_function_call_arguments_done(
-    data: &serde_json::Value,
-) -> Result<ResponseEvent, SseError> {
+fn parse_function_call_arguments_done(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
     let event: FunctionCallArgumentsDoneData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::FunctionCallArgumentsDone {
         output_index: event.output_index,

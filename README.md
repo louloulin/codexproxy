@@ -485,7 +485,13 @@ curl -X POST http://localhost:8080/v1/responses \
   -d '{
     "model": "gpt-4o",
     "input": [
-      {"type": "message", "role": "user", "content": "Hello!"}
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {"type": "input_text", "text": "Hello!"}
+        ]
+      }
     ]
   }'
 ```
