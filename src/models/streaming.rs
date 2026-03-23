@@ -3,6 +3,7 @@
 //! This module contains models for handling streaming (SSE) responses.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use super::response::{
     DetailedUsage, FunctionCallOutputPayload, InputTokensDetails, McpContent, McpToolResult,
@@ -206,14 +207,15 @@ pub enum ResponseEvent {
     /// Response created event
     #[serde(rename = "response.created")]
     Created {
-        /// Response ID
-        id: String,
-        /// Object type
-        object: String,
-        /// Creation timestamp
-        created: u64,
-        /// Model used
-        model: String,
+        /// The lifecycle response snapshot
+        response: ResponseSnapshot,
+    },
+
+    /// Response in-progress event
+    #[serde(rename = "response.in_progress")]
+    InProgress {
+        /// The lifecycle response snapshot
+        response: ResponseSnapshot,
     },
 
     /// Output item added event
@@ -321,28 +323,22 @@ pub enum ResponseEvent {
     /// Response completed event
     #[serde(rename = "response.completed")]
     Completed {
-        /// Response ID
-        response_id: String,
-        /// Token usage statistics
-        token_usage: Option<DetailedUsage>,
+        /// The lifecycle response snapshot
+        response: ResponseSnapshot,
     },
 
     /// Response failed event
     #[serde(rename = "response.failed")]
     Failed {
-        /// Response ID
-        response_id: String,
-        /// Error information
-        error: ResponseError,
+        /// The lifecycle response snapshot
+        response: ResponseSnapshot,
     },
 
     /// Response incomplete event
     #[serde(rename = "response.incomplete")]
     Incomplete {
-        /// Response ID
-        response_id: String,
-        /// Reason for incompleteness
-        reason: String,
+        /// The lifecycle response snapshot
+        response: ResponseSnapshot,
     },
 
     /// Rate limits updated event
@@ -394,6 +390,36 @@ pub struct ResponseError {
     pub code: String,
     /// Error message
     pub message: String,
+}
+
+/// Lifecycle snapshot for Responses protocol events.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseSnapshot {
+    /// Unique identifier for the response
+    pub id: String,
+    /// Object type
+    pub object: String,
+    /// Unix timestamp when the response was created
+    pub created_at: u64,
+    /// Response status
+    pub status: String,
+    /// Model used for the response
+    pub model: String,
+    /// Output items produced so far
+    #[serde(default)]
+    pub output: Vec<OutputItem>,
+    /// Usage statistics if available
+    #[serde(default)]
+    pub usage: Option<DetailedUsage>,
+    /// Error snapshot for failed responses
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<ResponseError>,
+    /// Provider-specific incomplete details
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub incomplete_details: Option<serde_json::Value>,
+    /// Additional lifecycle fields preserved for compatibility
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// Rate limit snapshot

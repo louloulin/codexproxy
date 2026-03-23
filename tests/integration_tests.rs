@@ -43,6 +43,7 @@ fn create_test_config() -> Config {
         logging: openai_proxy::config::LoggingConfig {
             level: "info".to_string(),
             format: "json".to_string(),
+            file_path: "logs/server.log".to_string(),
         },
     }
 }
@@ -105,6 +106,68 @@ logging:
     assert!(
         status.is_none(),
         "server exited during startup with status: {status:?}"
+    );
+}
+
+#[test]
+fn test_binary_creates_and_truncates_log_file_on_startup() {
+    let binary =
+        std::env::var("CARGO_BIN_EXE_openai-proxy").expect("cargo should provide binary path");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!("openai-proxy-log-startup-{unique}"));
+    let log_dir = temp_dir.join("logs");
+    let log_path = log_dir.join("server.log");
+    fs::create_dir_all(&log_dir).unwrap();
+    fs::write(&log_path, "stale log line that must be truncated").unwrap();
+
+    let config = r#"
+server:
+  host: "127.0.0.1"
+  port: 0
+  body_limit: 10485760
+
+providers:
+  zhipu:
+    api_key: "test-zhipu-key"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    default_model: "glm-4"
+    timeout: 60
+
+routing:
+  default: "zhipu"
+  model_mapping:
+    glm-4: "zhipu"
+
+logging:
+  level: "info"
+  format: "json"
+  file_path: "logs/server.log"
+"#;
+    fs::write(temp_dir.join("config.yaml"), config).unwrap();
+
+    let mut child = Command::new(binary)
+        .current_dir(&temp_dir)
+        .spawn()
+        .expect("binary should spawn");
+
+    thread::sleep(Duration::from_millis(600));
+
+    let _ = child.kill();
+    let _ = child.wait();
+
+    let log_contents = fs::read_to_string(&log_path).unwrap();
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    assert!(
+        !log_contents.contains("stale log line that must be truncated"),
+        "startup should truncate previous file contents"
+    );
+    assert!(
+        log_contents.contains("Starting OpenAI Proxy Server"),
+        "startup logs should be written to the log file"
     );
 }
 
@@ -198,6 +261,25 @@ async fn test_responses_endpoint_exists() {
 
     // Should get a response (might be error if no actual API, but endpoint exists)
     assert!(response.status() != StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_responses_alias_endpoint_exists() {
+    let app = create_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/responses")
+                .header("Content-Type", "application/json")
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -410,6 +492,7 @@ async fn test_missing_provider_error() {
         logging: openai_proxy::config::LoggingConfig {
             level: "info".to_string(),
             format: "json".to_string(),
+            file_path: "logs/server.log".to_string(),
         },
     };
 

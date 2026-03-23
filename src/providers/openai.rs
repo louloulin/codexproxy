@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde_json::Value;
 
 use crate::config::ProviderConfig;
-use crate::models::{ChatRequest, ChatResponse};
+use crate::models::chat::{ChatCompletionChunk, ChatRequest, ChatResponse};
 
 use super::{
     build_http_client, current_proxy_env_summary, extract_provider_error_details,
@@ -186,8 +186,76 @@ impl LLMProvider for OpenAIProvider {
             return Err(parse_provider_error(status, &body));
         }
 
-        // Return streaming response
-        Ok(StreamingChat::new(status.as_u16(), vec![]))
+        // Process SSE stream and collect chunks
+        let mut chunks = Vec::new();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
+
+        let body_str = String::from_utf8_lossy(&body);
+        let line_count = body_str.lines().count();
+
+        tracing::info!(
+            provider = self.name(),
+            total_lines = line_count,
+            body_length = body_str.len(),
+            "processing SSE stream"
+        );
+
+        // Parse SSE format: "data: {...}\n\n" or "data: [DONE]\n\n"
+        let mut data_lines = 0;
+        let mut parsed_chunks = 0;
+        let mut errors = 0;
+
+        for line in body_str.lines() {
+            let line = line.trim();
+            if line.starts_with("data: ") {
+                data_lines += 1;
+                let data = &line[6..]; // Remove "data: " prefix
+                if data == "[DONE]" {
+                    tracing::info!(
+                        provider = self.name(),
+                        "found [DONE] marker in SSE stream"
+                    );
+                    break;
+                }
+                // Parse the chunk
+                match serde_json::from_str::<ChatCompletionChunk>(data) {
+                    Ok(chunk) => {
+                        tracing::debug!(
+                            provider = self.name(),
+                            chunk_id = %chunk.id,
+                            choices_count = chunk.choices.len(),
+                            has_usage = chunk.usage.is_some(),
+                            "parsed chunk successfully"
+                        );
+                        chunks.push(chunk);
+                        parsed_chunks += 1;
+                    }
+                    Err(e) => {
+                        errors += 1;
+                        tracing::warn!(
+                            provider = self.name(),
+                            error = %e,
+                            data_preview = &data[..data.len().min(200)],
+                            "failed to parse chunk"
+                        );
+                    }
+                }
+            }
+        }
+
+        tracing::info!(
+            provider = self.name(),
+            data_lines = data_lines,
+            parsed_chunks = parsed_chunks,
+            parse_errors = errors,
+            "SSE stream processing complete"
+        );
+
+        // Return streaming response with collected chunks
+        Ok(StreamingChat::new(status.as_u16(), chunks))
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ProviderError> {

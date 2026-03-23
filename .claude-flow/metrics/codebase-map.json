@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-03-22T11:05:58.412Z",
+  "timestamp": "2026-03-22T15:08:02.885Z",
   "projectRoot": "/Users/louloulin/Documents/linchong/claude/rcodex",
   "structure": {
     "hasPackageJson": false,
     "hasTsConfig": false,
-    "hasClaudeConfig": false,
+    "hasClaudeConfig": true,
     "hasClaudeFlow": true
   },
-  "scannedAt": 1774177558412
+  "scannedAt": 1774192082885
 }

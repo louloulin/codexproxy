@@ -7,7 +7,9 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::models::response::{OutputItem, Usage};
-use crate::models::streaming::{ContentPartType, RateLimitSnapshot, ResponseError, ResponseEvent};
+use crate::models::streaming::{
+    ContentPartType, RateLimitSnapshot, ResponseError, ResponseEvent, ResponseSnapshot,
+};
 
 /// SSE event parsing error
 #[derive(Debug, Error)]
@@ -69,6 +71,7 @@ pub fn parse_responses_sse_event(data: &str) -> Result<Option<ResponseEvent>, Ss
     let event = match raw.event_type.as_str() {
         // Response lifecycle events
         "response.created" => parse_created_event(&raw.data)?,
+        "response.in_progress" => parse_in_progress_event(&raw.data)?,
         "response.completed" => parse_completed_event(&raw.data)?,
         "response.failed" => parse_failed_event(&raw.data)?,
         "response.incomplete" => parse_incomplete_event(&raw.data)?,
@@ -112,64 +115,169 @@ pub fn parse_responses_sse_event(data: &str) -> Result<Option<ResponseEvent>, Ss
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
-struct CreatedEventData {
-    id: String,
-    object: String,
-    created: u64,
-    model: String,
+#[serde(untagged)]
+enum CreatedEventData {
+    Nested { response: ResponseSnapshot },
+    Legacy {
+        id: String,
+        object: String,
+        created: u64,
+        model: String,
+    },
 }
 
 fn parse_created_event(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
-    let event: CreatedEventData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::Created {
-        id: event.id,
-        object: event.object,
-        created: event.created,
-        model: event.model,
+        response: parse_lifecycle_snapshot(data.clone(), "in_progress")?,
     })
 }
 
 #[derive(Debug, Deserialize)]
-struct CompletedEventData {
-    response_id: String,
-    #[serde(default)]
-    token_usage: Option<Usage>,
+#[serde(untagged)]
+enum CompletedEventData {
+    Nested { response: ResponseSnapshot },
+    Legacy {
+        response_id: String,
+        #[serde(default)]
+        token_usage: Option<Usage>,
+    },
 }
 
 fn parse_completed_event(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
-    let event: CompletedEventData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::Completed {
-        response_id: event.response_id,
-        token_usage: event.token_usage,
+        response: parse_lifecycle_snapshot(data.clone(), "completed")?,
     })
 }
 
 #[derive(Debug, Deserialize)]
-struct FailedEventData {
-    response_id: String,
-    error: ResponseError,
+#[serde(untagged)]
+enum FailedEventData {
+    Nested { response: ResponseSnapshot },
+    Legacy {
+        response_id: String,
+        error: ResponseError,
+    },
 }
 
 fn parse_failed_event(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
-    let event: FailedEventData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::Failed {
-        response_id: event.response_id,
-        error: event.error,
+        response: parse_lifecycle_snapshot(data.clone(), "failed")?,
     })
 }
 
 #[derive(Debug, Deserialize)]
-struct IncompleteEventData {
-    response_id: String,
-    reason: String,
+#[serde(untagged)]
+enum IncompleteEventData {
+    Nested { response: ResponseSnapshot },
+    Legacy { response_id: String, reason: String },
 }
 
 fn parse_incomplete_event(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
-    let event: IncompleteEventData = serde_json::from_value(data.clone())?;
     Ok(ResponseEvent::Incomplete {
-        response_id: event.response_id,
-        reason: event.reason,
+        response: parse_lifecycle_snapshot(data.clone(), "incomplete")?,
     })
+}
+
+fn parse_in_progress_event(data: &serde_json::Value) -> Result<ResponseEvent, SseError> {
+    Ok(ResponseEvent::InProgress {
+        response: parse_lifecycle_snapshot(data.clone(), "in_progress")?,
+    })
+}
+
+fn parse_lifecycle_snapshot(
+    data: serde_json::Value,
+    fallback_status: &str,
+) -> Result<ResponseSnapshot, SseError> {
+    if let Ok(CreatedEventData::Nested { response }) = serde_json::from_value(data.clone()) {
+        return Ok(response);
+    }
+
+    if let Ok(CompletedEventData::Nested { response }) = serde_json::from_value(data.clone()) {
+        return Ok(response);
+    }
+
+    if let Ok(FailedEventData::Nested { response }) = serde_json::from_value(data.clone()) {
+        return Ok(response);
+    }
+
+    if let Ok(IncompleteEventData::Nested { response }) = serde_json::from_value(data.clone()) {
+        return Ok(response);
+    }
+
+    if let Ok(CreatedEventData::Legacy {
+        id,
+        object,
+        created,
+        model,
+    }) = serde_json::from_value(data.clone())
+    {
+        return Ok(ResponseSnapshot {
+            id,
+            object,
+            created_at: created,
+            status: fallback_status.to_string(),
+            model,
+            output: Vec::new(),
+            usage: None,
+            error: None,
+            incomplete_details: None,
+            extra: Default::default(),
+        });
+    }
+
+    if let Ok(CompletedEventData::Legacy {
+        response_id,
+        token_usage,
+    }) = serde_json::from_value(data.clone())
+    {
+        return Ok(ResponseSnapshot {
+            id: response_id,
+            object: "response".to_string(),
+            created_at: 0,
+            status: fallback_status.to_string(),
+            model: String::new(),
+            output: Vec::new(),
+            usage: token_usage,
+            error: None,
+            incomplete_details: None,
+            extra: Default::default(),
+        });
+    }
+
+    if let Ok(FailedEventData::Legacy { response_id, error }) = serde_json::from_value(data.clone())
+    {
+        return Ok(ResponseSnapshot {
+            id: response_id,
+            object: "response".to_string(),
+            created_at: 0,
+            status: fallback_status.to_string(),
+            model: String::new(),
+            output: Vec::new(),
+            usage: None,
+            error: Some(error),
+            incomplete_details: None,
+            extra: Default::default(),
+        });
+    }
+
+    if let Ok(IncompleteEventData::Legacy { response_id, reason }) = serde_json::from_value(data) {
+        return Ok(ResponseSnapshot {
+            id: response_id,
+            object: "response".to_string(),
+            created_at: 0,
+            status: fallback_status.to_string(),
+            model: String::new(),
+            output: Vec::new(),
+            usage: None,
+            error: None,
+            incomplete_details: Some(serde_json::json!({ "reason": reason })),
+            extra: Default::default(),
+        });
+    }
+
+    Err(SseError::InvalidFormat(
+        "invalid lifecycle event payload".to_string(),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -442,12 +550,28 @@ mod tests {
         let result = parse_responses_sse_event(data).unwrap().unwrap();
 
         match result {
-            ResponseEvent::Created { id, model, .. } => {
-                assert_eq!(id, "resp_123");
-                assert_eq!(model, "gpt-4");
+            ResponseEvent::Created { response } => {
+                assert_eq!(response.id, "resp_123");
+                assert_eq!(response.model, "gpt-4");
             }
             _ => panic!("Expected Created event"),
         }
+    }
+
+    #[test]
+    fn test_parse_created_event_with_nested_response_object() {
+        let data = r#"{"type":"response.created","response":{"id":"resp_123","object":"response","created_at":1234567890,"status":"in_progress","model":"gpt-4","output":[],"usage":null}}"#;
+        let result = parse_responses_sse_event(data).unwrap().unwrap();
+
+        assert!(matches!(result, ResponseEvent::Created { .. }));
+    }
+
+    #[test]
+    fn test_parse_in_progress_event_with_nested_response_object() {
+        let data = r#"{"type":"response.in_progress","response":{"id":"resp_123","object":"response","created_at":1234567890,"status":"in_progress","model":"gpt-4","output":[],"usage":null}}"#;
+        let result = parse_responses_sse_event(data).unwrap().unwrap();
+
+        assert!(matches!(result, ResponseEvent::InProgress { .. }));
     }
 
     #[test]
@@ -473,9 +597,51 @@ mod tests {
     fn test_sse_stream_parser() {
         let mut parser = SseStreamParser::new();
 
-        let input = "data: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"delta\":\"Hi\"}\n\ndata: {\"type\":\"response.completed\",\"response_id\":\"resp_123\"}\n\n";
+        let input = "data: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"delta\":\"Hi\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_123\",\"object\":\"response\",\"created_at\":1234567890,\"status\":\"completed\",\"model\":\"gpt-4\",\"output\":[],\"usage\":null}}\n\n";
 
         let events = parser.parse(input);
         assert_eq!(events.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_completed_event_without_token_usage() {
+        // Test parsing response.completed without token_usage field
+        let data = r#"{"type":"response.completed","response_id":"resp_123"}"#;
+        let result = parse_responses_sse_event(data).unwrap().unwrap();
+
+        match result {
+            ResponseEvent::Completed { response } => {
+                assert_eq!(response.id, "resp_123");
+                assert!(response.usage.is_none());
+            }
+            _ => panic!("Expected Completed event"),
+        }
+    }
+
+    #[test]
+    fn test_parse_completed_event_with_partial_token_usage() {
+        // Test parsing response.completed with partial token_usage (missing input_tokens)
+        let data = r#"{"type":"response.completed","response_id":"resp_456","token_usage":{"output_tokens":10}}"#;
+        let result = parse_responses_sse_event(data).unwrap().unwrap();
+
+        match result {
+            ResponseEvent::Completed { response } => {
+                assert_eq!(response.id, "resp_456");
+                assert!(response.usage.is_some());
+                let usage = response.usage.unwrap();
+                assert_eq!(usage.input_tokens, 0); // Should default to 0
+                assert_eq!(usage.output_tokens, 10);
+                assert_eq!(usage.total_tokens, 0); // Should default to 0
+            }
+            _ => panic!("Expected Completed event"),
+        }
+    }
+
+    #[test]
+    fn test_parse_completed_event_with_nested_response_object() {
+        let data = r#"{"type":"response.completed","response":{"id":"resp_789","object":"response","created_at":1234567890,"status":"completed","model":"gpt-4","output":[],"usage":{"output_tokens":10}}}"#;
+        let result = parse_responses_sse_event(data).unwrap().unwrap();
+
+        assert!(matches!(result, ResponseEvent::Completed { .. }));
     }
 }

@@ -89,6 +89,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/health", get(handlers::health_check))
         .route("/v1/chat/completions", post(handlers::chat_completions))
         .route("/v1/responses", post(handlers::responses))
+        .route("/responses", post(handlers::responses))
         // Zhipu direct endpoint - bypasses transform layer
         .route(
             "/v1/providers/zhipu/chat/completions",

@@ -312,15 +312,15 @@ pub struct LogProb {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
     /// Number of tokens in the prompt
-    #[serde(alias = "promptTokens")]
+    #[serde(alias = "promptTokens", default)]
     pub prompt_tokens: u32,
 
     /// Number of tokens in the completion
-    #[serde(alias = "completionTokens")]
+    #[serde(alias = "completionTokens", default)]
     pub completion_tokens: u32,
 
     /// Total number of tokens
-    #[serde(alias = "totalTokens")]
+    #[serde(alias = "totalTokens", default)]
     pub total_tokens: u32,
 }
 

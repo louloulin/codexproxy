@@ -1305,9 +1305,9 @@ pub struct McpToolCallOutputResult {
 
 /// Usage statistics (enhanced with detailed token info)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Usage {
     /// Number of tokens in the input
+    #[serde(default)]
     pub input_tokens: u64,
 
     /// Detailed input token breakdown
@@ -1315,6 +1315,7 @@ pub struct Usage {
     pub input_tokens_details: Option<InputTokensDetails>,
 
     /// Number of tokens in the output
+    #[serde(default)]
     pub output_tokens: u64,
 
     /// Detailed output token breakdown
@@ -1322,12 +1323,12 @@ pub struct Usage {
     pub output_tokens_details: Option<OutputTokensDetails>,
 
     /// Total number of tokens
+    #[serde(default)]
     pub total_tokens: u64,
 }
 
 /// Detailed input token information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct InputTokensDetails {
     /// Tokens served from cache
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1336,7 +1337,6 @@ pub struct InputTokensDetails {
 
 /// Detailed output token information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct OutputTokensDetails {
     /// Tokens used for reasoning
     #[serde(default, skip_serializing_if = "Option::is_none")]

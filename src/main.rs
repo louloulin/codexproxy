@@ -14,11 +14,11 @@ use crate::server::create_server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logging
-    init_logging();
-
     // Load configuration
     let config = Config::load()?;
+    
+    // Initialize logging after config is loaded so file sink and level come from config.
+    init_logging(&config.logging)?;
 
     tracing::info!(
         "Starting OpenAI Proxy Server on {}:{}",

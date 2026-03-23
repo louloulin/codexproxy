@@ -106,6 +106,8 @@ pub struct LoggingConfig {
     pub level: String,
     #[serde(default = "default_log_format")]
     pub format: String,
+    #[serde(default = "default_log_file_path")]
+    pub file_path: String,
 }
 
 fn default_log_level() -> String {
@@ -114,6 +116,10 @@ fn default_log_level() -> String {
 
 fn default_log_format() -> String {
     "json".to_string()
+}
+
+fn default_log_file_path() -> String {
+    "logs/server.log".to_string()
 }
 
 impl Config {
@@ -177,6 +183,7 @@ impl Default for Config {
             logging: LoggingConfig {
                 level: "info".to_string(),
                 format: "json".to_string(),
+                file_path: default_log_file_path(),
             },
         }
     }
@@ -232,5 +239,34 @@ logging:
                 .default_model,
             "glm-4"
         );
+        assert_eq!(config.logging.file_path, "logs/server.log");
+    }
+
+    #[test]
+    fn test_deserialize_config_with_custom_log_file_path() {
+        let yaml = r#"
+server:
+  host: "127.0.0.1"
+  port: 9080
+
+providers:
+  zhipu:
+    api_key: "test-zhipu-key"
+    base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
+    default_model: "glm-4"
+    timeout: 60
+
+routing:
+  default: "zhipu"
+
+logging:
+  level: "debug"
+  format: "json"
+  file_path: "custom/server.log"
+"#;
+
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(config.logging.file_path, "custom/server.log");
     }
 }

@@ -41,6 +41,30 @@ impl ZhipuProvider {
     }
 }
 
+fn prepare_zhipu_request_body(mut request_body: Value) -> Value {
+    if let Some(tools) = request_body.get_mut("tools").and_then(Value::as_array_mut) {
+        for tool in tools.iter_mut() {
+            let tool_type = tool
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+
+            if let Some(object) = tool.as_object_mut() {
+                if tool_type != "function" {
+                    object.remove("function");
+                }
+
+                if tool_type == "web_search" && !object.contains_key("web_search") {
+                    object.insert("web_search".to_string(), serde_json::json!({}));
+                }
+            }
+        }
+    }
+
+    request_body
+}
+
 #[async_trait]
 impl LLMProvider for ZhipuProvider {
     fn name(&self) -> &str {
@@ -60,8 +84,10 @@ impl LLMProvider for ZhipuProvider {
         let endpoint_kind = classify_zhipu_base_url(&self.config.base_url);
 
         // Serialize request
-        let request_body = serde_json::to_value(&request)
-            .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
+        let request_body = prepare_zhipu_request_body(
+            serde_json::to_value(&request)
+                .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?,
+        );
         let request_body_text = serde_json::to_string(&request_body)
             .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
 
@@ -141,8 +167,10 @@ impl LLMProvider for ZhipuProvider {
         let endpoint_kind = classify_zhipu_base_url(&self.config.base_url);
 
         // Serialize request with stream: true
-        let mut request_body = serde_json::to_value(&request)
-            .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
+        let mut request_body = prepare_zhipu_request_body(
+            serde_json::to_value(&request)
+                .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?,
+        );
 
         if let Some(obj) = request_body.as_object_mut() {
             obj.insert("stream".to_string(), serde_json::Value::Bool(true));
@@ -218,21 +246,65 @@ impl LLMProvider for ZhipuProvider {
             .map_err(|e| ProviderError::RequestFailed(e.to_string()))?;
 
         let body_str = String::from_utf8_lossy(&body);
+        let line_count = body_str.lines().count();
+
+        tracing::info!(
+            provider = self.name(),
+            total_lines = line_count,
+            body_length = body_str.len(),
+            "processing SSE stream"
+        );
 
         // Parse SSE format: "data: {...}\n\n" or "data: [DONE]\n\n"
+        let mut data_lines = 0;
+        let mut parsed_chunks = 0;
+        let mut errors = 0;
+
         for line in body_str.lines() {
             let line = line.trim();
             if line.starts_with("data: ") {
+                data_lines += 1;
                 let data = &line[6..]; // Remove "data: " prefix
                 if data == "[DONE]" {
+                    tracing::info!(
+                        provider = self.name(),
+                        "found [DONE] marker in SSE stream"
+                    );
                     break;
                 }
                 // Parse the chunk
-                if let Ok(chunk) = serde_json::from_str::<ChatCompletionChunk>(data) {
-                    chunks.push(chunk);
+                match serde_json::from_str::<ChatCompletionChunk>(data) {
+                    Ok(chunk) => {
+                        tracing::debug!(
+                            provider = self.name(),
+                            chunk_id = %chunk.id,
+                            choices_count = chunk.choices.len(),
+                            has_usage = chunk.usage.is_some(),
+                            "parsed chunk successfully"
+                        );
+                        chunks.push(chunk);
+                        parsed_chunks += 1;
+                    }
+                    Err(e) => {
+                        errors += 1;
+                        tracing::warn!(
+                            provider = self.name(),
+                            error = %e,
+                            data_preview = &data[..data.len().min(200)],
+                            "failed to parse chunk"
+                        );
+                    }
                 }
             }
         }
+
+        tracing::info!(
+            provider = self.name(),
+            data_lines = data_lines,
+            parsed_chunks = parsed_chunks,
+            parse_errors = errors,
+            "SSE stream processing complete"
+        );
 
         // Return streaming response with collected chunks
         Ok(StreamingChat::new(status.as_u16(), chunks))
@@ -283,6 +355,8 @@ impl LLMProvider for ZhipuProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::chat::{ChatRequest, Message, Tool};
+    use serde_json::json;
 
     #[test]
     fn test_zhipu_url_building() {
@@ -301,5 +375,51 @@ mod tests {
         });
         let header = provider.build_auth_header();
         assert_eq!(header, "Bearer test-key");
+    }
+
+    #[test]
+    fn test_prepare_zhipu_request_body_adds_web_search_object() {
+        let request = ChatRequest {
+            model: "glm-5".to_string(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: Some("hi".to_string()),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            temperature: None,
+            top_p: None,
+            max_tokens: Some(1),
+            stream: None,
+            stop: None,
+            n: 1,
+            stream_options: None,
+            include_usage: Some(true),
+            response_format: None,
+            seed: None,
+            organization: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            logit_bias: None,
+            user: None,
+            tools: Some(vec![Tool {
+                tool_type: "web_search".to_string(),
+                function: None,
+            }]),
+            tool_choice: None,
+            parallel_tool_calls: true,
+        };
+
+        let body = serde_json::to_value(&request).unwrap();
+        let prepared = prepare_zhipu_request_body(body);
+
+        assert_eq!(
+            prepared["tools"][0],
+            json!({
+                "type": "web_search",
+                "web_search": {}
+            })
+        );
     }
 }
