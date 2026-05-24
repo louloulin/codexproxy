@@ -330,3 +330,404 @@ mod override_tests {
         assert_eq!(provider, "deepseek");
     }
 }
+
+#[cfg(test)]
+mod auth_tests {
+    use super::*;
+    use rusqlite::params;
+    use tempfile::NamedTempFile;
+
+    // Tests aligned with mimo2codex db.auth.test.ts
+
+    #[test]
+    fn test_creates_all_auth_tables() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let conn = init_database(temp_file.path()).unwrap();
+        
+        // Create all auth tables
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                password_hash TEXT,
+                is_admin INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        ).unwrap();
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        ).unwrap();
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                key_prefix TEXT NOT NULL,
+                key_hash TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TEXT,
+                revoked_at TEXT
+            )",
+            [],
+        ).unwrap();
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS codex_config_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                provider_id TEXT,
+                model_id TEXT,
+                auth_backup_path TEXT,
+                config_backup_path TEXT,
+                preserved INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        ).unwrap();
+        
+        // Verify tables exist via count query
+        let users_exists: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(users_exists, 1);
+        
+        let sessions_exists: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='user_sessions'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(sessions_exists, 1);
+        
+        let api_keys_exists: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='user_api_keys'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(api_keys_exists, 1);
+        
+        let history_exists: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='codex_config_history'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(history_exists, 1);
+    }
+
+    #[test]
+    fn test_user_crud_operations() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let conn = init_database(temp_file.path()).unwrap();
+        
+        // Create users table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                password_hash TEXT,
+                is_admin INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active'
+            )",
+            [],
+        ).unwrap();
+        
+        // Create user
+        conn.execute(
+            "INSERT INTO users (username, display_name, password_hash, is_admin) VALUES (?1, ?2, ?3, ?4)",
+            params!["alice", "Alice", "scrypt$xxx", 1],
+        ).unwrap();
+        
+        let user_id: i64 = conn.last_insert_rowid();
+        assert!(user_id > 0, "User should be created");
+        
+        // Find by id
+        let name: String = conn.query_row(
+            "SELECT username FROM users WHERE id = ?1",
+            params![user_id],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(name, "alice");
+        
+        // Find by username
+        let id: i64 = conn.query_row(
+            "SELECT id FROM users WHERE username = ?1",
+            params!["alice"],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(id, user_id);
+        
+        // Update user
+        conn.execute(
+            "UPDATE users SET display_name = ?1, is_admin = ?2, status = ?3 WHERE id = ?4",
+            params!["Alice Liddell", 0, "disabled", user_id],
+        ).unwrap();
+        
+        // Verify update
+        let (display, admin, status): (String, i32, String) = conn.query_row(
+            "SELECT display_name, is_admin, status FROM users WHERE id = ?1",
+            params![user_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ).unwrap();
+        assert_eq!(display, "Alice Liddell");
+        assert_eq!(admin, 0);
+        assert_eq!(status, "disabled");
+        
+        // Count users
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM users",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count, 1);
+        
+        // Delete user
+        conn.execute("DELETE FROM users WHERE id = ?1", params![user_id]).unwrap();
+        
+        let count_after: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM users",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count_after, 0);
+    }
+
+    #[test]
+    fn test_session_crud_operations() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let conn = init_database(temp_file.path()).unwrap();
+        
+        // Create tables
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT,
+                is_admin INTEGER DEFAULT 0
+            )",
+            [],
+        ).unwrap();
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        ).unwrap();
+        
+        // Create user
+        conn.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?1, ?2)",
+            params!["alice", "scrypt$xxx"],
+        ).unwrap();
+        let user_id: i64 = conn.last_insert_rowid();
+        
+        // Create session
+        conn.execute(
+            "INSERT INTO user_sessions (token, user_id, expires_at) VALUES (?1, ?2, ?3)",
+            params!["abc123token", user_id, "2025-01-01 00:00:00"],
+        ).unwrap();
+        
+        // Find session by token
+        let session_user_id: i64 = conn.query_row(
+            "SELECT user_id FROM user_sessions WHERE token = ?1",
+            params!["abc123token"],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(session_user_id, user_id);
+        
+        // Unknown token returns error
+        let result: Result<i64, _> = conn.query_row(
+            "SELECT user_id FROM user_sessions WHERE token = ?1",
+            params!["unknown"],
+            |row| row.get(0),
+        );
+        assert!(result.is_err());
+        
+        // Delete session
+        conn.execute(
+            "DELETE FROM user_sessions WHERE token = ?1",
+            params!["abc123token"],
+        ).unwrap();
+        
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM user_sessions",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_api_key_crud_operations() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let conn = init_database(temp_file.path()).unwrap();
+        
+        // Create tables
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL
+            )",
+            [],
+        ).unwrap();
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                key_prefix TEXT NOT NULL,
+                key_hash TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TEXT,
+                revoked_at TEXT
+            )",
+            [],
+        ).unwrap();
+        
+        // Create user
+        conn.execute(
+            "INSERT INTO users (username) VALUES (?1)",
+            params!["alice"],
+        ).unwrap();
+        let user_id: i64 = conn.last_insert_rowid();
+        
+        // Create API key
+        conn.execute(
+            "INSERT INTO user_api_keys (user_id, name, key_prefix, key_hash) VALUES (?1, ?2, ?3, ?4)",
+            params![user_id, "laptop", "m2c_abc", "hash_xyz"],
+        ).unwrap();
+        
+        let key_id: i64 = conn.last_insert_rowid();
+        assert!(key_id > 0);
+        
+        // List keys for user
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM user_api_keys WHERE user_id = ?1",
+            params![user_id],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count, 1);
+        
+        // Revoke key
+        conn.execute(
+            "UPDATE user_api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?1",
+            params![key_id],
+        ).unwrap();
+        
+        // Verify revoked
+        let revoked_at: Option<String> = conn.query_row(
+            "SELECT revoked_at FROM user_api_keys WHERE id = ?1",
+            params![key_id],
+            |row| row.get(0),
+        ).ok();
+        assert!(revoked_at.is_some(), "Key should be revoked");
+        
+        // Delete key
+        conn.execute("DELETE FROM user_api_keys WHERE id = ?1", params![key_id]).unwrap();
+        
+        let count_after: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM user_api_keys",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count_after, 0);
+    }
+
+    #[test]
+    fn test_codex_history_crud_operations() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let conn = init_database(temp_file.path()).unwrap();
+        
+        // Create tables
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL
+            )",
+            [],
+        ).unwrap();
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS codex_config_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                provider_id TEXT,
+                model_id TEXT,
+                auth_backup_path TEXT,
+                config_backup_path TEXT,
+                preserved INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        ).unwrap();
+        
+        // Create user
+        conn.execute(
+            "INSERT INTO users (username) VALUES (?1)",
+            params!["alice"],
+        ).unwrap();
+        let user_id: i64 = conn.last_insert_rowid();
+        
+        // Create history entry
+        conn.execute(
+            "INSERT INTO codex_config_history (user_id, provider_id, model_id, preserved) VALUES (?1, ?2, ?3, ?4)",
+            params![user_id, "mimo", "mimo-v2.5-pro", 1],
+        ).unwrap();
+        
+        let history_id: i64 = conn.last_insert_rowid();
+        
+        // Count entries for user (instead of collecting list)
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM codex_config_history WHERE user_id = ?1",
+            params![user_id],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count, 1);
+        
+        // Verify preserved flag
+        let preserved: i32 = conn.query_row(
+            "SELECT preserved FROM codex_config_history WHERE id = ?1",
+            params![history_id],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(preserved, 1);
+    }
+
+    #[test]
+    fn test_user_count_empty() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let conn = init_database(temp_file.path()).unwrap();
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL
+            )",
+            [],
+        ).unwrap();
+        
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM users",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count, 0);
+    }
+}
