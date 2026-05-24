@@ -568,3 +568,69 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+    // Additional mimo2codex aligned tests
+    
+    #[test]
+    fn test_provider_id_validation() {
+        use crate::providers_new::generic_provider::GenericProviderSpec;
+        
+        // Valid provider ID
+        let spec = GenericProviderSpec {
+            id: "valid-provider".to_string(),
+            shortcut: None,
+            display_name: None,
+            base_url: "https://api.example.com/v1".to_string(),
+            env_key: "TEST_API_KEY".to_string(),
+            default_model: Some("test-model".to_string()),
+            wire_api: None,
+            models: None,
+            features: None,
+            force_default_model: None,
+            docs_url: None,
+        };
+        
+        assert_eq!(spec.id, "valid-provider");
+    }
+    
+    #[test]
+    fn test_generic_features_default() {
+        use crate::providers_new::generic_provider::GenericFeatures;
+        
+        let features = GenericFeatures::default();
+        assert!(features.web_search.is_none());
+        assert!(features.minimax_compat.is_none());
+    }
+    
+    #[test]
+    fn test_wire_api_default() {
+        use crate::providers_new::generic_provider::WireApi;
+        
+        let api = WireApi::default();
+        assert_eq!(api, WireApi::Chat);
+    }
+    
+    #[test]
+    fn test_provider_model_from_generic() {
+        use crate::providers_new::generic_provider::GenericProviderModel;
+        use crate::providers_new::extended_provider::ProviderModel;
+        
+        let generic = GenericProviderModel {
+            id: "test-model".to_string(),
+            aliases: Some(vec!["alias1".to_string(), "alias2".to_string()]),
+            display_name: Some("Test Model".to_string()),
+            supports_images: Some(true),
+            supports_reasoning: Some(true),
+            supports_web_search: Some(false),
+            context_window: Some(128_000),
+            max_output_tokens: Some(8192),
+            deprecated_after: None,
+        };
+        
+        let model: ProviderModel = (&generic).into();
+        assert_eq!(model.id, "test-model");
+        assert_eq!(model.aliases.len(), 2);
+        assert!(model.features.vision);
+        assert!(model.features.thinking);
+        assert!(!model.features.web_search);
+    }

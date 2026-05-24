@@ -19,7 +19,7 @@
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
 
-**总计测试**: 160 passed
+**总计测试**: 172 passed
 
 ---
 
@@ -180,7 +180,7 @@ pub async fn download_and_cache_image(url: &str, cache_dir: &Path) -> Result<Str
 ## 三、测试覆盖
 
 ```
-test result: ok. 160 passed; 0 failed; 0 ignored
+test result: ok. 172 passed; 0 failed; 0 ignored
 ```
 
 **测试分布**:
@@ -221,7 +221,7 @@ cargo test --lib - 133 passed ✅
 
 **总新增**: ~2600 行
 
-**测试**: 160 passed (新增 mimo2codex 对齐测试 27 个)
+**测试**: 172 passed (新增 mimo2codex 对齐测试 39 个)
 
 **主要差异已消除**:
 - ✅ Generic Provider JSON 配置

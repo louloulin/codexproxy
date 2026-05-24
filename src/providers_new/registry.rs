@@ -184,3 +184,27 @@ mod tests {
         assert_eq!(registry.len(), 0);
     }
 }
+
+    #[test]
+    fn test_registry_len() {
+        let registry = ProviderRegistry::new();
+        assert_eq!(registry.len(), 0);
+    }
+    
+    #[test]
+    fn test_registry_empty() {
+        let registry = ProviderRegistry::new();
+        assert!(registry.is_empty());
+    }
+    
+    #[test]
+    fn test_registry_provider_names() {
+        let registry = ProviderRegistry::new();
+        assert!(registry.provider_names().is_empty());
+    }
+    
+    #[test]
+    fn test_registry_all_models() {
+        let registry = ProviderRegistry::new();
+        assert!(registry.all_models().is_empty());
+    }
