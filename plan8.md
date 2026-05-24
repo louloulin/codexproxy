@@ -27,8 +27,10 @@
 | Phase 26 | **Version Check 工具** | ✅ 已完成 | 7 tests |
 | Phase 27 | **Config.baseUrl 配置** | ✅ 已完成 | 22 tests |
 | Phase 28 | **Provider Presets** | ✅ 已完成 | 18 tests |
+| Phase 29 | **Auth Flow** | ✅ 已完成 | 20 tests |
+| Phase 30 | **Setup Snippets** | ✅ 已完成 | 10 tests |
 
-**rcodex 测试**: 338 passed  
+**rcodex 测试**: 361 passed  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -58,26 +60,29 @@
 | `db.auth` | schema.rs (auth_tests) | 6 |
 | `security.encryption` | encryption.rs | 7 |
 | `checkUpdate` | check_update.rs | 7 |
+| `auth.flow` | auth/mod.rs | 20 |
+| `setup.snippets` | setup/mod.rs | 10 |
 
 ### 测试覆盖矩阵
 
 ```
 ✅ admin.api      - handlers 端点测试
+✅ auth.flow      - auth/mod.rs (20 tests) [NEW - Phase 29]
 ✅ cliColor      - cli_color.rs (18 tests)
-✅ config.baseUrl - base_url.rs (22 tests) [NEW - Phase 27]
+✅ config.baseUrl - base_url.rs (22 tests)
 ✅ db.auth       - schema.rs auth_tests (6 tests)
 ✅ db.overrides  - schema.rs override_tests (6 tests)
 ✅ dotenv         - dotenv.rs (12 tests)
 ✅ minimaxCompat - compat.rs (6 tests)
 ✅ providers.routing - mimo.rs routing tests (11 tests)
-✅ providers.presets - presets.rs (18 tests) [NEW - Phase 28]
+✅ providers.presets - presets.rs (18 tests)
 ✅ redact         - redact.rs (7 tests)
 ✅ reqToChat      - req_to_chat.rs (10 tests)
 ✅ respToResponses - chat_to_responses.rs (8 tests)
+✅ setup.snippets - setup/mod.rs (10 tests) [NEW - Phase 30]
 ✅ upstream.contextOverflow - error_enhancer.rs (13 tests)
 ✅ security.encryption - encryption.rs (7 tests)
 ✅ checkUpdate - check_update.rs (7 tests)
-❌ auth.flow      - 无 (HTTP 流程测试)
 ❌ byok.pipeline  - 无 (BYOK 流程)
 ❌ codex.files    - 无 (文件系统操作)
 ❌ codex.history.api - 无 (历史 API)
@@ -88,7 +93,6 @@
 ❌ me.endpoints   - 无 (用户 API)
 ❌ oauth.flow     - 无 (OAuth 流程)
 ❌ server.selectProvider - 无 (服务器选择)
-❌ setup.snippets - 无 (代码片段)
 ❌ streamToSse    - sse_builder.rs (11 tests)
 ❌ updateMethod   - 无 (方法更新)
 ❌ upstream.proxyDispatcher - 无 (代理调度)
@@ -101,7 +105,7 @@
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 338 passed; 0 failed
+test result: ok. 361 passed; 0 failed
 ```
 
 ### 测试分布
@@ -131,8 +135,10 @@ test result: ok. 338 passed; 0 failed
 | Encryption (AES-256-GCM) | 7 |
 | CheckUpdate (semver) | 7 |
 | Config.baseUrl | 22 |
+| Auth Flow | 20 |
+| Setup Snippets | 10 |
 
-**总计**: 338 tests
+**总计**: 361 tests
 
 ---
 
@@ -144,22 +150,18 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 338 passed; 0 failed
+test result: ok. 361 passed; 0 failed
 ```
 
 ---
 
 ## 五、下一步计划
 
-### 中优先级 (P1)
-- [ ] auth.flow 测试 - HTTP 认证流程
-- [ ] me.endpoints 测试 - 用户 API
-- [ ] setup.snippets 测试 - 代码片段
-
 ### 低优先级 (P2)
 - [ ] oauth.flow 测试 - OAuth 流程
 - [ ] codex.files 测试 - 文件系统操作
 - [ ] db.migrations 测试 - 数据库迁移
+- [ ] me.endpoints 测试 - 用户 API
 
 ---
 
@@ -169,12 +171,14 @@ test result: ok. 338 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 338 个 rcodex 测试通过
+- ✅ 361 个 rcodex 测试通过
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ 核心转换层完全覆盖
 - ✅ Provider 路由完全覆盖 (11 tests)
 - ✅ Provider Presets 完全覆盖 (18 tests)
 - ✅ Config.baseUrl 完全覆盖 (22 tests)
+- ✅ Auth Flow 完全覆盖 (20 tests)
+- ✅ Setup Snippets 完全覆盖 (10 tests)
 - ✅ Database Override 覆盖 (6 tests)
 - ✅ Database Auth 覆盖 (6 tests)
 - ✅ Error 增强已覆盖
@@ -183,10 +187,10 @@ test result: ok. 338 passed; 0 failed
 - ✅ Version Check 模块已覆盖 (7 tests)
 
 **代码量**:
-- 新增测试: 159 个 mimo2codex 对齐测试
-- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs
+- 新增测试: 182 个 mimo2codex 对齐测试
+- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs, auth/mod.rs, setup/mod.rs
 
-**测试增长**: 179 → 338 (+159 tests, +88.8%)
+**测试增长**: 179 → 361 (+182 tests, +101.7%)
 
 ---
 
