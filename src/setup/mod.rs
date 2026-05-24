@@ -246,3 +246,7 @@ mod tests {
         assert_eq!(bundle.cc_switch_config_toml, files.config_toml);
     }
 }
+
+pub mod update_method;
+
+pub use update_method::{detect_update_method, package_root, UpdateInfo, UpdateMethod, UpdateStep};

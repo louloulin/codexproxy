@@ -31,8 +31,9 @@
 | Phase 30 | **Setup Snippets** | ✅ 已完成 | 10 tests |
 | Phase 31 | **Me Endpoints** | ✅ 已完成 | 13 tests |
 | Phase 32 | **Codex 模块测试修复** | ✅ 已完成 | 18 tests |
+| Phase 33 | **Update Method 检测** | ✅ 已完成 | 6 tests |
 
-**rcodex 测试**: 391 passed (单线程)  
+**rcodex 测试**: 397 passed (单线程)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -42,16 +43,19 @@
 ### rcodex 测试结果 (单线程运行)
 ```
 $ cargo test --lib -- --test-threads=1
-test result: ok. 391 passed; 0 failed
+test result: ok. 397 passed; 0 failed
 ```
 
-### Codex 模块测试修复
+### Update Method 模块 (Phase 33)
 
-| 问题 | 原因 | 解决方案 |
-|------|------|----------|
-| 静态 Mutex 导致 PoisonError | 并发测试共享锁 | 使用 tempfile::TempDir 替代 |
-| 环境变量污染 | 并发测试相互影响 | 每个测试使用独立临时目录 |
-| symlink 路径比较失败 | `/var/folders` -> `/private/var/folders` | 简化 `assert_inside_codex_dir` |
+| 测试 | 描述 |
+|------|------|
+| test_package_root_finds_cargo_toml | 验证 package_root 找到 Cargo.toml |
+| test_detect_update_method_returns_non_empty_command | 验证返回非空命令 |
+| test_update_info_has_steps | 验证更新步骤不为空 |
+| test_update_step_has_command | 验证每步都有命令 |
+| test_git_or_npm_available | 验证 git 或 npm 可用 |
+| test_update_info_command_format | 验证命令格式正确 |
 
 ### 测试分布
 
@@ -84,8 +88,9 @@ test result: ok. 391 passed; 0 failed
 | Setup Snippets | 10 |
 | Me Endpoints | 13 |
 | Codex 模块 | 18 |
+| Update Method | 6 |
 
-**总计**: 391 tests
+**总计**: 397 tests
 
 ---
 
@@ -119,6 +124,7 @@ test result: ok. 391 passed; 0 failed
 | `me.endpoints` | auth/me.rs | 13 |
 | `codex.files` | codex/mod.rs | 11 |
 | `codex.state` | codex/state.rs | 7 |
+| `updateMethod` | setup/update_method.rs | 6 |
 
 ### 测试覆盖矩阵
 
@@ -130,7 +136,7 @@ test result: ok. 391 passed; 0 failed
 ✅ db.auth       - schema.rs auth_tests (6 tests)
 ✅ db.overrides  - schema.rs override_tests (6 tests)
 ✅ dotenv         - dotenv.rs (12 tests)
-✅ me.endpoints   - auth/me.rs (13 tests) [NEW - Phase 31]
+✅ me.endpoints   - auth/me.rs (13 tests)
 ✅ minimaxCompat - compat.rs (6 tests)
 ✅ providers.routing - mimo.rs routing tests (11 tests)
 ✅ providers.presets - presets.rs (18 tests)
@@ -143,6 +149,7 @@ test result: ok. 391 passed; 0 failed
 ✅ checkUpdate - check_update.rs (7 tests)
 ✅ codex.files - codex/mod.rs (11 tests)
 ✅ codex.state - codex/state.rs (7 tests)
+✅ updateMethod - setup/update_method.rs (6 tests)
 ❌ byok.pipeline  - 无 (BYOK 流程)
 ❌ codex.history.api - 无 (历史 API)
 ❌ db.codexHistory - 无 (历史记录)
@@ -150,7 +157,6 @@ test result: ok. 391 passed; 0 failed
 ❌ db.oauth       - 无 (OAuth)
 ❌ oauth.flow     - 无 (OAuth 流程)
 ❌ server.selectProvider - 无 (服务器选择)
-❌ updateMethod   - 无 (方法更新)
 ❌ upstream.proxyDispatcher - 无 (代理调度)
 ```
 
@@ -164,7 +170,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib -- --test-threads=1
-test result: ok. 391 passed; 0 failed
+test result: ok. 397 passed; 0 failed
 ```
 
 **注意**: Codex 模块测试需要 `--test-threads=1` 以避免环境变量污染问题。
@@ -177,7 +183,7 @@ test result: ok. 391 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1/P2 功能已实现
-- ✅ 391 个 rcodex 测试通过 (单线程)
+- ✅ 397 个 rcodex 测试通过 (单线程)
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ 核心转换层完全覆盖
 - ✅ Provider 路由完全覆盖 (11 tests)
@@ -194,14 +200,15 @@ test result: ok. 391 passed; 0 failed
 - ✅ Version Check 模块已覆盖 (7 tests)
 - ✅ Codex 文件管理完全覆盖 (11 tests)
 - ✅ Codex 状态管理完全覆盖 (7 tests)
+- ✅ Update Method 检测完全覆盖 (6 tests)
 
 **代码量**:
-- 新增测试: 195 个 mimo2codex 对齐测试
-- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs, auth/mod.rs, auth/me.rs, setup/mod.rs, codex/mod.rs, codex/state.rs
+- 新增测试: 218 个 mimo2codex 对齐测试
+- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs, auth/mod.rs, auth/me.rs, setup/mod.rs, codex/mod.rs, codex/state.rs, setup/update_method.rs
 
-**测试增长**: 179 → 391 (+212 tests, +118.4%)
+**测试增长**: 179 → 397 (+218 tests, +121.8%)
 
-**mimo2codex 对齐率**: 25/32 模块 (78.1%)
+**mimo2codex 对齐率**: 26/32 模块 (81.3%)
 
 ---
 
@@ -214,6 +221,7 @@ test result: ok. 391 passed; 0 failed
 - [ ] 数据库迁移
 - [ ] OAuth 流程
 - [ ] 服务器选择 Provider
+- [ ] 代理调度
 
 ---
 
