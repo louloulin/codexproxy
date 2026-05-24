@@ -198,7 +198,7 @@ pub enum ActiveKind {
 - [DONE]
 ```
 
-### Phase 4: Provider 架构升级（2-3 天）
+### Phase 4: Provider 架构升级（2-3 天） ✅ **已完成**
 
 #### 4.1 扩展 Provider Trait
 ```rust
@@ -245,7 +245,7 @@ impl MimoProvider {
 }
 ```
 
-### Phase 5: 错误处理增强（1 天）
+### Phase 5: 错误处理增强（1 天） ✅ **已完成**
 
 #### 5.1 错误增强系统
 ```rust
@@ -423,12 +423,12 @@ rcodex/
 - [ ] 支持 function_call.delta 事件
 - [ ] 正确的 [DONE] marker 时机
 
-### Phase 4 - Provider 架构升级 🔜 (待开始)
+### Phase 4 - Provider 架构升级 ✅
 - [ ] Provider trait 扩展
 - [ ] MiMo Provider 实现
 - [ ] Provider 动态路由
 
-### Phase 5 - 错误处理增强 🔜 (待开始)
+### Phase 5 - 错误处理增强 ✅
 - [ ] 错误增强系统
 - [ ] Provider 特定错误映射
 
