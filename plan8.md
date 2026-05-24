@@ -18,12 +18,8 @@
 | Phase 17 | WebSearch 错误提示 | ✅ 已完成 | 4 tests |
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
-| **NEW** | Generic Provider Tests | ✅ 已完成 | 5 tests |
-| **NEW** | SSE Event Tests | ✅ 已完成 | 11 tests |
-| **NEW** | ReqToChat Tests | ✅ 已完成 | 10 tests |
-| **NEW** | Streaming State Tests | ✅ 已完成 | 8 tests |
 
-**rcodex 测试**: 212 passed (持续增长)  
+**rcodex 测试**: 217 passed (持续增长)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -34,36 +30,25 @@
 
 | mimo2codex 测试文件 | rcodex 对应实现 | 状态 | 测试数 |
 |-------------------|----------------|------|--------|
-| `contextOverflow.test.ts` | `error_enhancer.rs::detect_context_overflow` | ✅ | 13 |
-| `reqToChat.test.ts` | `transform_new/req_to_chat.rs` | ✅ | 10 (新增) |
+| `contextOverflow.test.ts` | `error_enhancer.rs` | ✅ | 13 |
+| `reqToChat.test.ts` | `transform_new/req_to_chat.rs` | ✅ | 10 |
 | `minimaxCompat.test.ts` | `transform_new/compat.rs` | ✅ | 6 |
-| `streamToSse.test.ts` | `streaming_new/sse_builder.rs` | ✅ | 11 (新增) |
-| `respToResponses.test.ts` | `streaming_new/streaming_state.rs` | ✅ | 8 (新增) |
-| `providers.generic.test.ts` | `providers_new/generic_provider.rs` | ✅ | 5 (新增) |
+| `streamToSse.test.ts` | `streaming_new/sse_builder.rs` | ✅ | 11 |
+| `respToResponses.test.ts` | `streaming_new/streaming_state.rs` | ✅ | 8 |
+| `providers.generic.test.ts` | `providers_new/generic_provider.rs` | ✅ | 5 |
+| `providers.deepseek.test.ts` | `providers_new/mimo.rs` | ✅ | 8 |
 | `redact.test.ts` | `util/redact.rs` | ✅ | 7 |
 
-### 新增 mimo2codex 对齐测试详情
+### 新增 mimo2codex 对齐测试
 
-#### Generic Provider Tests (5 tests)
+#### MiMo Provider Tests (8 tests)
 ```rust
-// generic_provider.rs - mimo2codex aligned
-test_resolve_model_alias_match - 验证模型别名匹配
-test_provider_is_open_catalog - 验证开放目录行为
-test_generic_provider_spec_env_key_derivation - 验证环境变量推导
-test_generic_provider_spec_with_shortcut - 验证快捷方式
-test_provider_model_from_generic - 验证模型转换
-```
-
-#### SSE Event Builder Tests (11 tests)
-```rust
-// sse_builder.rs - mimo2codex_tests
-test_response_created_event_format - 验证 response.created 事件格式
-test_output_item_added_event_format - 验证 output_item.added 事件格式
-test_text_delta_event_format - 验证 text delta 事件格式
-test_reasoning_delta_event_format - 验证 reasoning delta 事件格式
-test_response_done_event_format - 验证 response.done 事件格式
-test_function_call_delta_event_format - 验证 function call delta 事件格式
-// ... 共 11 个测试
+// mimo.rs - mimo2codex aligned
+test_mimo_thinking_enabled_for_pro - thinking enabled for pro models
+test_mimo_thinking_disabled_for_flash - thinking disabled for flash models
+test_mimo_model_variants - model normalization variants
+test_token_plan_detection - token plan key detection
+test_builtin_models_count - built-in models count
 ```
 
 ---
@@ -73,7 +58,7 @@ test_function_call_delta_event_format - 验证 function call delta 事件格式
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 212 passed; 0 failed; 0 ignored
+test result: ok. 217 passed; 0 failed; 0 ignored
 ```
 
 ### 测试分布
@@ -89,11 +74,12 @@ test result: ok. 212 passed; 0 failed; 0 ignored
 | Thinking inject | 7 |
 | Compat | 6 |
 | Redact | 7 |
+| MiMo Provider | 8 |
 | Transform layer | 30+ |
 | Handlers | 15+ |
 | Database | 2 |
 
-**总计**: 212 tests
+**总计**: 217 tests
 
 ---
 
@@ -105,7 +91,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 212 passed; 0 failed
+test result: ok. 217 passed; 0 failed
 ```
 
 ---
@@ -124,6 +110,7 @@ test result: ok. 212 passed; 0 failed
 | reasoning_summary_text | 流式事件 | Delta 字段 | ✅ |
 | WebSearch 错误 | 独立检测 | 独立检测 | ✅ |
 | 模型别名解析 | 严格匹配 + 别名 | 严格匹配 + 别名 | ✅ |
+| MiMo Provider | Thinking 配置 | Thinking 配置 | ✅ |
 
 ---
 
@@ -133,17 +120,18 @@ test result: ok. 212 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 212 个 rcodex 测试通过 (持续增长)
+- ✅ 217 个 rcodex 测试通过 (持续增长)
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ Generic Provider mimo2codex 对齐测试 (5 tests)
+- ✅ MiMo Provider mimo2codex 对齐测试 (8 tests)
 - ✅ SSE Event Builder mimo2codex 对齐测试 (11 tests)
 - ✅ ReqToChat mimo2codex 对齐测试 (10 tests)
 - ✅ Streaming State mimo2codex 对齐测试 (8 tests)
 
 **代码量**:
-- 新增测试: 33 个 mimo2codex 对齐测试
+- 新增测试: 38 个 mimo2codex 对齐测试
 
-**测试增长**: 179 → 212 (+33 tests, +18.4%)
+**测试增长**: 179 → 217 (+38 tests, +21.2%)
 
 **下一步 (可选 P2)**:
 - 日志系统完善

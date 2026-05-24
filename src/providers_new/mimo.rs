@@ -355,4 +355,72 @@ mod tests {
         let token_provider = MimoProvider::with_defaults("mm-test-key");
         assert!(token_provider.is_token_plan());
     }
+
+    
+    // mimo2codex aligned tests
+    
+    #[test]
+    fn test_mimo_thinking_enabled_for_pro() {
+        use crate::models::chat_extended::ThinkingConfig;
+        
+        let config = ThinkingConfig {
+            thinking_type: crate::models::chat_extended::ThinkingType::Enabled,
+        };
+        
+        assert!(matches!(config.thinking_type, crate::models::chat_extended::ThinkingType::Enabled));
+    }
+    
+    #[test]
+    fn test_mimo_thinking_disabled_for_flash() {
+        use crate::models::chat_extended::ThinkingConfig;
+        
+        let config = ThinkingConfig {
+            thinking_type: crate::models::chat_extended::ThinkingType::Disabled,
+        };
+        
+        assert!(matches!(config.thinking_type, crate::models::chat_extended::ThinkingType::Disabled));
+    }
+    
+    #[test]
+    fn test_mimo_model_variants() {
+        let variants = vec![
+            ("mini", "mimo-mini"),
+            ("flash", "mimo-flash"),
+            ("mimo-mini", "mimo-mini"),
+            ("mimo-flash", "mimo-flash"),
+        ];
+        
+        let provider = MimoProvider::with_defaults("test-key");
+        
+        for (input, expected) in variants {
+            let normalized = provider.normalize_model(input);
+            assert_eq!(normalized, expected, "Failed for input: {}", input);
+        }
+        
+        // Unknown variants pass through
+        let unknown = provider.normalize_model("v2.5-pro");
+        assert_eq!(unknown, "v2.5-pro");
+    }
+    
+    #[test]
+    fn test_token_plan_detection() {
+        // Normal keys are not token plan
+        let normal = MimoProvider::with_defaults("sk-normal-key-12345");
+        assert!(!normal.is_token_plan());
+        
+        // mm-* prefixed keys are token plan  
+        let mm_key = MimoProvider::with_defaults("mm-test-key");
+        assert!(mm_key.is_token_plan());
+        
+        // token-* prefixed keys are token plan  
+        let token_prefix = MimoProvider::with_defaults("token-test-key");
+        assert!(token_prefix.is_token_plan());
+    }
+    
+    #[test]
+    fn test_builtin_models_count() {
+        let models = MimoProvider::builtin_models();
+        // Should have at least the main models
+        assert!(models.len() >= 3);
+    }
 }
