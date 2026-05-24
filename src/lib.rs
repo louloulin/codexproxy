@@ -14,6 +14,7 @@ pub mod providers;
 pub mod server;
 pub mod sse;
 pub mod transform;
+pub mod transform_new; // New complete transform layer
 
 // Re-export commonly used types
 pub use config::Config;

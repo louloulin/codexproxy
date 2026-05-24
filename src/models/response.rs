@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Responses API Request
 /// POST /v1/responses
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResponsesRequest {
     /// ID of the model to use
     pub model: String,
@@ -256,6 +256,18 @@ impl From<MessageItemCompat> for MessageItem {
             content,
             end_turn: value.end_turn,
             phase: value.phase,
+        }
+    }
+}
+
+impl Default for MessageItem {
+    fn default() -> Self {
+        MessageItem {
+            id: None,
+            role: "user".to_string(),
+            content: Vec::new(),
+            end_turn: None,
+            phase: None,
         }
     }
 }
@@ -1465,4 +1477,124 @@ mod tests {
             "expected shorthand content block to deserialize, got: {request:?}"
         );
     }
+}
+
+// ============================================================================
+// Responses Object - Full response type for non-streaming responses
+// ============================================================================
+
+/// Full Responses API response object
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponsesObject {
+    /// Unique identifier for the response
+    pub id: String,
+    
+    /// Object type
+    pub object: String,
+    
+    /// Response status
+    pub status: String,
+    
+    /// Model used for the response
+    pub model: String,
+    
+    /// Output items produced
+    #[serde(default)]
+    pub output: Vec<OutputItem>,
+    
+    /// Usage statistics
+    #[serde(default)]
+    pub usage: Option<Usage>,
+    
+    /// Error if any
+    #[serde(default)]
+    pub error: Option<serde_json::Value>,
+    
+    /// Incomplete details if truncated
+    #[serde(default, rename = "incomplete_details", skip_serializing_if = "Option::is_none")]
+    pub incomplete_details: Option<IncompleteDetails>,
+    
+    /// Parallel tool calls setting
+    #[serde(default, rename = "parallel_tool_calls")]
+    pub parallel_tool_calls: Option<bool>,
+    
+    /// Tool choice setting
+    #[serde(default, rename = "tool_choice")]
+    pub tool_choice: Option<serde_json::Value>,
+    
+    /// Reasoning settings
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<serde_json::Value>,
+    
+    /// Text format
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<serde_json::Value>,
+    
+    /// Metadata
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+    
+    /// Previous response ID for continuation
+    #[serde(default, rename = "previous_response_id", skip_serializing_if = "Option::is_none")]
+    pub previous_response_id: Option<String>,
+    
+    /// Instructions
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
+    
+    /// Temperature
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    
+    /// Top P
+    #[serde(default, rename = "top_p", skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    
+    /// Max output tokens
+    #[serde(default, rename = "max_output_tokens", skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u32>,
+    
+    /// Tools
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<Tool>>,
+    
+    /// Truncation setting
+    #[serde(default)]
+    pub truncation: Option<String>,
+}
+
+impl Default for ResponsesObject {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            object: "response".to_string(),
+            status: "completed".to_string(),
+            model: String::new(),
+            output: Vec::new(),
+            usage: None,
+            error: None,
+            incomplete_details: None,
+            parallel_tool_calls: Some(true),
+            tool_choice: None,
+            reasoning: None,
+            text: None,
+            metadata: None,
+            previous_response_id: None,
+            instructions: None,
+            temperature: None,
+            top_p: None,
+            max_output_tokens: None,
+            tools: None,
+            truncation: Some("disabled".to_string()),
+        }
+    }
+}
+
+/// Incomplete details for truncated responses
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IncompleteDetails {
+    /// Reason for incomplete response
+    pub reason: String,
 }

@@ -104,9 +104,9 @@ trait LLMProvider {
 
 ## 三、改造计划
 
-### Phase 1: 类型系统补全（1-2 天）
+### Phase 1: 类型系统补全（1-2 天） ✅ **已完成**
 
-#### 1.1 扩展 Responses API 类型
+#### 1.1 扩展 Responses API 类型 ✅ **已完成**
 ```rust
 // src/models/response.rs 新增：
 - ResponsesTool::Function / ResponsesTool::Builtin
@@ -125,7 +125,7 @@ trait LLMProvider {
 - reasoning_effort: Option<String>
 ```
 
-### Phase 2: Transform 层重构（2-3 天）
+### Phase 2: Transform 层重构（2-3 天） ✅ **已完成**
 
 #### 2.1 完全重写 Responses → Chat 转换
 ```rust
@@ -395,6 +395,43 @@ rcodex/
 3. **是否需要 BYOK（Bring Your Own Key）功能？**
    - mimo2codex 有完整的用户认证和 BYOK 机制
    - rcodex 目前没有
+
+---
+
+
+
+---
+
+## ✅ 已完成的工作
+
+### Phase 1 - 类型系统补全 ✅
+- [x] 创建 `src/models/chat_extended.rs` - 扩展类型（ThinkingConfig, WebSearchTool, UrlCitation等）
+- [x] 添加 `ResponsesObject` 到 `src/models/response.rs`
+- [x] 更新 `src/models/mod.rs` 导出新类型
+- [x] 为 `ResponsesRequest` 和 `MessageItem` 添加 `Default` 实现
+
+### Phase 2 - Transform 层重构 ✅
+- [x] 创建 `src/transform_new/` 目录
+- [x] 实现 `req_to_chat.rs` - Responses API → Chat Completions API
+- [x] 实现 `chat_to_responses.rs` - Chat → Responses（修复编译错误）
+- [x] 更新 `src/lib.rs` 包含 transform_new 模块
+- [x] 82 个测试全部通过
+
+### Phase 3 - 流式处理重建 🔄 (进行中)
+- [ ] 实现 SSE 事件状态机
+- [ ] 支持 reasoning_summary_text.delta 事件
+- [ ] 支持 function_call.delta 事件
+- [ ] 正确的 [DONE] marker 时机
+
+### Phase 4 - Provider 架构升级 🔜 (待开始)
+- [ ] Provider trait 扩展
+- [ ] MiMo Provider 实现
+- [ ] Provider 动态路由
+
+### Phase 5 - 错误处理增强 🔜 (待开始)
+- [ ] 错误增强系统
+- [ ] Provider 特定错误映射
+
 
 ---
 
