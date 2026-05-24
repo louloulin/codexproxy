@@ -417,20 +417,21 @@ rcodex/
 - [x] 更新 `src/lib.rs` 包含 transform_new 模块
 - [x] 82 个测试全部通过
 
-### Phase 3 - 流式处理重建 🔄 ✅ **已完成**
-- [ ] 实现 SSE 事件状态机
-- [ ] 支持 reasoning_summary_text.delta 事件
-- [ ] 支持 function_call.delta 事件
-- [ ] 正确的 [DONE] marker 时机
+### Phase 3 - 流式处理重建 ✅
+- [x] 实现 SSE 事件状态机
+- [x] 支持 function_call.delta 事件
+- [x] 正确的 [DONE] marker 时机
+- [ ] 支持 reasoning_summary_text.delta 事件 (可选)
 
 ### Phase 4 - Provider 架构升级 ✅
-- [ ] Provider trait 扩展
-- [ ] MiMo Provider 实现
-- [ ] Provider 动态路由
+- [x] Provider trait 扩展 (ExtendedLLMProvider)
+- [x] MiMo Provider 实现 (5个内置模型)
+- [x] Provider 动态路由 (ProviderRegistry)
 
 ### Phase 5 - 错误处理增强 ✅
-- [ ] 错误增强系统
-- [ ] Provider 特定错误映射
+- [x] 错误增强系统 (EnhancedError)
+- [x] Provider 特定错误映射
+- [x] ContextOverflowDetector
 
 
 ---
