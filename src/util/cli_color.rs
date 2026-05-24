@@ -234,7 +234,7 @@ mod tests {
     where
         F: Fn(),
     {
-        // Save and clear all relevant vars
+        // Save all current values
         let original: Vec<(String, Option<String>)> = KEYS_TO_CLEAR
             .iter()
             .map(|k| {
@@ -243,12 +243,12 @@ mod tests {
             })
             .collect();
 
-        // Clear all before setting patch
+        // Clear ALL relevant keys first to ensure clean state
         for k in KEYS_TO_CLEAR {
             env::remove_var(k);
         }
 
-        // Set patch values
+        // Set only the patch values
         for (k, v) in &patch {
             match v {
                 Some(val) => env::set_var(k, val),
@@ -302,6 +302,7 @@ mod tests {
     #[test]
     fn test_returns_2_for_force_color_2() {
         with_env(vec![("FORCE_COLOR", Some("2"))], || {
+            // FORCE_COLOR=2 should return 2 directly, not 0
             assert_eq!(detect_color_level(), 2);
         });
     }
