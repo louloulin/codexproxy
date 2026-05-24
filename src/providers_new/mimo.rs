@@ -424,3 +424,156 @@ mod tests {
         assert!(models.len() >= 3);
     }
 }
+
+#[cfg(test)]
+mod mimo2codex_routing_tests {
+    use super::*;
+
+    // Tests aligned with mimo2codex providers.routing.test.ts
+
+    #[test]
+    fn test_mimo_vision_model_has_image_support() {
+        // mimo-vision and mimo-flash support images
+        let models = MimoProvider::builtin_models();
+        
+        let vision = models.iter().find(|m| m.id == "mimo-vision");
+        assert!(vision.is_some(), "mimo-vision should exist");
+        assert!(vision.unwrap().features.vision, "mimo-vision should support images");
+        
+        let flash = models.iter().find(|m| m.id == "mimo-flash");
+        assert!(flash.is_some(), "mimo-flash should exist");
+        assert!(flash.unwrap().features.vision, "mimo-flash should support images");
+    }
+
+    #[test]
+    fn test_mimo_mini_no_image_support() {
+        let models = MimoProvider::builtin_models();
+        
+        let mini = models.iter().find(|m| m.id == "mimo-mini");
+        assert!(mini.is_some(), "mimo-mini should exist");
+        assert!(!mini.unwrap().features.vision, "mimo-mini should NOT support images");
+    }
+
+    #[test]
+    fn test_mimo_pro_supports_reasoning() {
+        let models = MimoProvider::builtin_models();
+        
+        let pro = models.iter().find(|m| m.id == "mimo-pro");
+        assert!(pro.is_some(), "mimo-pro should exist");
+        assert!(pro.unwrap().features.thinking, "mimo-pro should support reasoning");
+    }
+
+    #[test]
+    fn test_mimo_thinking_supports_reasoning() {
+        let models = MimoProvider::builtin_models();
+        
+        let thinking = models.iter().find(|m| m.id == "mimo-thinking");
+        assert!(thinking.is_some(), "mimo-thinking should exist");
+        assert!(thinking.unwrap().features.thinking, "mimo-thinking should support reasoning");
+    }
+
+    #[test]
+    fn test_unknown_model_passes_through() {
+        let provider = MimoProvider::with_defaults("sk-test");
+        
+        // Unknown models should pass through unchanged
+        let unknown = provider.normalize_model("unknown-model-xyz");
+        assert_eq!(unknown, "unknown-model-xyz");
+        
+        let gpt = provider.normalize_model("gpt-4o");
+        assert_eq!(gpt, "gpt-4o");
+    }
+
+    #[test]
+    fn test_token_plan_key_patterns() {
+        // Test all token plan key patterns
+        let patterns = vec![
+            ("mm-xxx", true),
+            ("token-xxx", true),
+            ("sk-xxx", false),
+            ("mimo-xxx", false),
+            ("normal-key", false),
+        ];
+        
+        for (key, expected) in patterns {
+            let provider = MimoProvider::with_defaults(key);
+            assert_eq!(
+                provider.is_token_plan(),
+                expected,
+                "Key '{}' should be token plan: {}",
+                key,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_mimo_model_normalization_by_alias() {
+        // Full model normalization tests aligned with mimo2codex
+        let provider = MimoProvider::with_defaults("sk-test");
+        
+        // Test alias resolution
+        let tests = vec![
+            ("mini", "mimo-mini"),
+            ("pro", "mimo-pro"),
+            ("flash", "mimo-flash"),
+            ("vision", "mimo-vision"),
+            ("thinking", "mimo-thinking"),
+        ];
+        
+        for (input, expected) in tests {
+            let normalized = provider.normalize_model(input);
+            assert_eq!(normalized, expected, "Failed for alias: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_mimo_flash_supports_streaming() {
+        let models = MimoProvider::builtin_models();
+        
+        let flash = models.iter().find(|m| m.id == "mimo-flash");
+        assert!(flash.is_some(), "mimo-flash should exist");
+        assert!(flash.unwrap().features.streaming, "mimo-flash should support streaming");
+    }
+
+    #[test]
+    fn test_mimo_all_models_have_function_calling() {
+        let models = MimoProvider::builtin_models();
+        
+        for model in models {
+            assert!(
+                model.features.function_calling,
+                "Model {} should support function calling",
+                model.id
+            );
+        }
+    }
+
+    #[test]
+    fn test_mimo_model_context_windows() {
+        let models = MimoProvider::builtin_models();
+        
+        for model in models {
+            assert!(
+                model.context_window > 0,
+                "Model {} should have valid context window",
+                model.id
+            );
+            assert!(
+                model.max_output_tokens > 0,
+                "Model {} should have valid max output tokens",
+                model.id
+            );
+        }
+    }
+
+    #[test]
+    fn test_mimo_pro_has_highest_output_tokens() {
+        let models = MimoProvider::builtin_models();
+        
+        let pro = models.iter().find(|m| m.id == "mimo-pro");
+        assert!(pro.is_some(), "mimo-pro should exist");
+        // Pro should have highest output tokens (32768)
+        assert!(pro.unwrap().max_output_tokens >= 16384, "mimo-pro should have high output");
+    }
+}

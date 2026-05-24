@@ -20,8 +20,9 @@
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
 | Phase 20 | CLI Color 检测 | ✅ 已完成 | 18 tests |
 | Phase 21 | Dotenv 解析器 | ✅ 已完成 | 12 tests |
+| Phase 22 | Provider 路由测试 | ✅ 已完成 | 11 tests |
 
-**rcodex 测试**: 261 passed  
+**rcodex 测试**: 272 passed  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -39,6 +40,7 @@
 | `minimaxCompat` | compat.rs | 6 |
 | `providers.generic` | generic_provider.rs | 5 |
 | `providers.deepseek` | mimo.rs | 8 |
+| `providers.routing` | mimo.rs (mimo2codex_routing_tests) | 11 |
 | `redact` | redact.rs | 7 |
 | `image handling` | image_util.rs | 13 |
 | `cliColor` | cli_color.rs | 18 |
@@ -52,6 +54,7 @@
 ✅ cliColor      - cli_color.rs (18 tests)
 ✅ dotenv         - dotenv.rs (12 tests)
 ✅ minimaxCompat - compat.rs (6 tests)
+✅ providers.routing - mimo.rs routing tests (11 tests)
 ✅ redact         - redact.rs (7 tests)
 ✅ reqToChat      - req_to_chat.rs (10 tests)
 ✅ respToResponses - chat_to_responses.rs (8 tests)
@@ -67,7 +70,7 @@
 ❌ db.*           - 无 (数据库测试)
 ❌ me.endpoints   - 无 (用户 API)
 ❌ oauth.flow     - 无 (OAuth 流程)
-❌ providers.*    - 部分 (mimo.rs 有测试)
+❌ providers.presets - 无 (预设管理)
 ❌ security.encryption - 无 (加密)
 ❌ server.selectProvider - 无 (服务器选择)
 ❌ setup.snippets - 无 (代码片段)
@@ -83,7 +86,7 @@
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 261 passed; 0 failed; 0 ignored
+test result: ok. 272 passed; 0 failed; 0 ignored
 ```
 
 ### 测试分布
@@ -100,14 +103,15 @@ test result: ok. 261 passed; 0 failed; 0 ignored
 | Thinking inject | 7 |
 | Compat | 6 |
 | Redact | 7 |
-| MiMo Provider | 8 |
+| MiMo Provider | 19 |
+| Provider Routing | 11 |
 | Image Util | 13 |
 | CLI Color | 18 |
 | Dotenv | 12 |
 | Handlers | 15+ |
 | Database | 2 |
 
-**总计**: 261 tests
+**总计**: 272 tests
 
 ---
 
@@ -119,7 +123,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 261 passed; 0 failed
+test result: ok. 272 passed; 0 failed
 ```
 
 ---
@@ -139,6 +143,7 @@ test result: ok. 261 passed; 0 failed
 | WebSearch 错误 | 独立检测 | 独立检测 | ✅ |
 | 模型别名解析 | 严格匹配 + 别名 | 严格匹配 + 别名 | ✅ |
 | MiMo Provider | Thinking 配置 | Thinking 配置 | ✅ |
+| Provider 路由 | 模型别名解析 | 模型别名解析 + 快捷方式 | ✅ |
 | ChatToResponses | 响应转换 | 响应转换 | ✅ |
 | Image Handling | 图片格式检测 | PNG/JPEG/GIF/WebP | ✅ |
 | CLI Color | detectColorLevel + fg | detect_color_level + fg/bg | ✅ |
@@ -152,18 +157,18 @@ test result: ok. 261 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 261 个 rcodex 测试通过
+- ✅ 272 个 rcodex 测试通过
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ 核心转换层完全覆盖
-- ✅ Provider 路由已覆盖
+- ✅ Provider 路由完全覆盖 (11 tests)
 - ✅ Error 增强已覆盖
 - ✅ Image/CLI/Dotenv 工具模块已覆盖
 
 **代码量**:
-- 新增测试: 82 个 mimo2codex 对齐测试
+- 新增测试: 93 个 mimo2codex 对齐测试
 - 新增模块: cli_color.rs, dotenv.rs
 
-**测试增长**: 179 → 261 (+82 tests, +45.8%)
+**测试增长**: 179 → 272 (+93 tests, +51.9%)
 
 **下一步 (可选 P2)**:
 - 日志系统完善
