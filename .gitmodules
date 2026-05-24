@@ -1,0 +1,6 @@
+[submodule "codex"]
+	path = codex
+	url = https://github.com/openai/codex
+[submodule "mimo2codex"]
+	path = mimo2codex
+	url = https://github.com/mimo-ai/mimo2codex
