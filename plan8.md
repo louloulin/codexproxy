@@ -18,8 +18,10 @@
 | Phase 17 | WebSearch 错误提示 | ✅ 已完成 | 4 tests |
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
+| Phase 20 | CLI Color 检测 | ✅ 已完成 | 18 tests |
+| Phase 21 | Dotenv 解析器 | ✅ 已完成 | 12 tests |
 
-**rcodex 测试**: 231 passed (持续增长)  
+**rcodex 测试**: 261 passed (持续增长)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -39,6 +41,8 @@
 | `providers.deepseek.test.ts` | `providers_new/mimo.rs` | ✅ | 8 |
 | `redact.test.ts` | `util/redact.rs` | ✅ | 7 |
 | `image handling` | `transform_new/image_util.rs` | ✅ | 13 |
+| `cliColor.test.ts` | `util/cli_color.rs` | ✅ | 18 |
+| `dotenv.test.ts` | `util/dotenv.rs` | ✅ | 12 |
 
 ### 新增 mimo2codex 对齐测试
 
@@ -60,6 +64,46 @@ test_image_format_from_magic_gif87 - 验证 GIF87a magic bytes
 test_image_format_from_magic_gif89 - 验证 GIF89a magic bytes
 ```
 
+#### CLI Color Tests (18 tests)
+```rust
+// cli_color.rs - mimo2codex aligned
+test_returns_0_when_no_color_is_set - NO_COLOR=1 优先
+test_returns_0_for_force_color_0 - FORCE_COLOR=0
+test_returns_0_for_force_color_false - FORCE_COLOR=false
+test_returns_3_for_force_color_3 - FORCE_COLOR=3
+test_returns_2_for_force_color_2 - FORCE_COLOR=2
+test_returns_2_for_force_color_1 - FORCE_COLOR=1
+test_returns_2_for_force_color_true - FORCE_COLOR=true
+test_returns_3_for_colorterm_truecolor - COLORTERM=truecolor
+test_returns_3_for_colorterm_24bit - COLORTERM=24bit
+test_returns_3_for_colorterm_case_insensitive - 大小写不敏感
+test_returns_3_for_iterm - iTerm.app
+test_returns_3_for_vscode - VS Code
+test_returns_3_for_wt_session - Windows Terminal
+test_returns_2_for_apple_terminal - Apple Terminal 特殊处理
+test_fg_returns_empty_at_level_0 - 级别0无输出
+test_fg_emits_truecolor_sgr - 24位真彩输出
+test_fg_emits_256_color_sgr - 256色输出
+test_bg_truecolor - 背景色输出
+test_reset - 重置序列
+```
+
+#### Dotenv Tests (12 tests)
+```rust
+// dotenv.rs - mimo2codex aligned
+test_parses_plain_key_value_lines - 解析 KEY=VALUE
+test_strips_paired_surrounding_quotes - 引号剥离
+test_does_not_expand_variables - 不展开变量
+test_skips_comments_and_blank_lines - 跳过注释和空行
+test_tolerates_export_prefix - 支持 export 前缀
+test_tolerates_windows_crlf - Windows CRLF 支持
+test_rejects_invalid_key_names - 拒绝无效键名
+test_skips_lines_without_equals - 跳过无等号行
+test_allows_equals_in_value - 允许值中的等号
+test_strips_leading_whitespace - 去除首尾空白
+test_load_dotenv_file_overwrites - 加载并覆盖现有值
+```
+
 ---
 
 ## 三、测试覆盖
@@ -67,7 +111,7 @@ test_image_format_from_magic_gif89 - 验证 GIF89a magic bytes
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 231 passed; 0 failed; 0 ignored
+test result: ok. 261 passed; 0 failed; 0 ignored
 ```
 
 ### 测试分布
@@ -86,11 +130,13 @@ test result: ok. 231 passed; 0 failed; 0 ignored
 | Redact | 7 |
 | MiMo Provider | 8 |
 | Image Util | 13 |
+| CLI Color | 18 |
+| Dotenv | 12 |
 | Transform layer | 30+ |
 | Handlers | 15+ |
 | Database | 2 |
 
-**总计**: 231 tests
+**总计**: 261 tests
 
 ---
 
@@ -102,7 +148,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 231 passed; 0 failed
+test result: ok. 261 passed; 0 failed
 ```
 
 ---
@@ -124,6 +170,8 @@ test result: ok. 231 passed; 0 failed
 | MiMo Provider | Thinking 配置 | Thinking 配置 | ✅ |
 | ChatToResponses | 响应转换 | 响应转换 | ✅ |
 | Image Handling | 图片格式检测 | 图片格式检测 (PNG/JPEG/GIF/WebP) | ✅ |
+| CLI Color | detectColorLevel + fg | detect_color_level + fg/bg | ✅ |
+| Dotenv | parseDotenv | parse_dotenv + load_dotenv_file | ✅ |
 
 ---
 
@@ -133,7 +181,7 @@ test result: ok. 231 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 231 个 rcodex 测试通过 (持续增长)
+- ✅ 261 个 rcodex 测试通过 (持续增长)
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ Generic Provider mimo2codex 对齐测试 (5 tests)
 - ✅ MiMo Provider mimo2codex 对齐测试 (8 tests)
@@ -142,11 +190,14 @@ test result: ok. 231 passed; 0 failed
 - ✅ Streaming State mimo2codex 对齐测试 (8 tests)
 - ✅ ChatToResponses mimo2codex 对齐测试 (8 tests)
 - ✅ Image Util mimo2codex 对齐测试 (13 tests)
+- ✅ CLI Color mimo2codex 对齐测试 (18 tests)
+- ✅ Dotenv mimo2codex 对齐测试 (12 tests)
 
 **代码量**:
-- 新增测试: 52 个 mimo2codex 对齐测试
+- 新增测试: 82 个 mimo2codex 对齐测试
+- 新增模块: cli_color.rs, dotenv.rs
 
-**测试增长**: 179 → 231 (+52 tests, +29.1%)
+**测试增长**: 179 → 261 (+82 tests, +45.8%)
 
 **下一步 (可选 P2)**:
 - 日志系统完善
