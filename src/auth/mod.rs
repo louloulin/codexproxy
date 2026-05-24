@@ -8,8 +8,13 @@
 //! - Session management
 //! - Cookie parsing
 //! - Bearer token validation
+//! - User /me endpoints
+
+pub mod me;
 
 use serde::{Deserialize, Serialize};
+
+pub use me::{ApiKeyInfo, MeResponse, UserProfile, UserSettings, build_me_response, get_user_profile, get_user_settings, list_api_keys};
 
 /// Authentication mode
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
