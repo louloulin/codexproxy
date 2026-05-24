@@ -25,8 +25,10 @@
 | Phase 24 | Database Auth 测试 | ✅ 已完成 | 6 tests |
 | Phase 25 | **AES-256-GCM 加密** | ✅ 已完成 | 7 tests |
 | Phase 26 | **Version Check 工具** | ✅ 已完成 | 7 tests |
+| Phase 27 | **Config.baseUrl 配置** | ✅ 已完成 | 22 tests |
+| Phase 28 | **Provider Presets** | ✅ 已完成 | 18 tests |
 
-**rcodex 测试**: 298 passed  
+**rcodex 测试**: 338 passed  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -45,10 +47,12 @@
 | `providers.generic` | generic_provider.rs | 5 |
 | `providers.deepseek` | mimo.rs | 8 |
 | `providers.routing` | mimo.rs (mimo2codex_routing_tests) | 11 |
+| `providers.presets` | presets.rs | 18 |
 | `redact` | redact.rs | 7 |
 | `image handling` | image_util.rs | 13 |
 | `cliColor` | cli_color.rs | 18 |
 | `dotenv` | dotenv.rs | 12 |
+| `config.baseUrl` | base_url.rs | 22 |
 | `admin.api` | handlers (部分) | 5 |
 | `db.overrides` | schema.rs (override_tests) | 6 |
 | `db.auth` | schema.rs (auth_tests) | 6 |
@@ -60,11 +64,13 @@
 ```
 ✅ admin.api      - handlers 端点测试
 ✅ cliColor      - cli_color.rs (18 tests)
+✅ config.baseUrl - base_url.rs (22 tests) [NEW - Phase 27]
 ✅ db.auth       - schema.rs auth_tests (6 tests)
 ✅ db.overrides  - schema.rs override_tests (6 tests)
 ✅ dotenv         - dotenv.rs (12 tests)
 ✅ minimaxCompat - compat.rs (6 tests)
 ✅ providers.routing - mimo.rs routing tests (11 tests)
+✅ providers.presets - presets.rs (18 tests) [NEW - Phase 28]
 ✅ redact         - redact.rs (7 tests)
 ✅ reqToChat      - req_to_chat.rs (10 tests)
 ✅ respToResponses - chat_to_responses.rs (8 tests)
@@ -76,13 +82,11 @@
 ❌ codex.files    - 无 (文件系统操作)
 ❌ codex.history.api - 无 (历史 API)
 ❌ codex.state    - 无 (状态管理)
-❌ config.baseUrl - 无 (配置解析)
 ❌ db.codexHistory - 无 (历史记录)
 ❌ db.migrations  - 无 (数据库迁移)
 ❌ db.oauth       - 无 (OAuth)
 ❌ me.endpoints   - 无 (用户 API)
 ❌ oauth.flow     - 无 (OAuth 流程)
-❌ providers.presets - 无 (预设管理)
 ❌ server.selectProvider - 无 (服务器选择)
 ❌ setup.snippets - 无 (代码片段)
 ❌ streamToSse    - sse_builder.rs (11 tests)
@@ -97,7 +101,7 @@
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 298 passed; 0 failed
+test result: ok. 338 passed; 0 failed
 ```
 
 ### 测试分布
@@ -116,6 +120,7 @@ test result: ok. 298 passed; 0 failed
 | Redact | 7 |
 | MiMo Provider | 19 |
 | Provider Routing | 11 |
+| Provider Presets | 18 |
 | Image Util | 13 |
 | CLI Color | 18 |
 | Dotenv | 12 |
@@ -125,8 +130,9 @@ test result: ok. 298 passed; 0 failed
 | Database | 2 |
 | Encryption (AES-256-GCM) | 7 |
 | CheckUpdate (semver) | 7 |
+| Config.baseUrl | 22 |
 
-**总计**: 298 tests
+**总计**: 338 tests
 
 ---
 
@@ -138,16 +144,12 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 298 passed; 0 failed
+test result: ok. 338 passed; 0 failed
 ```
 
 ---
 
 ## 五、下一步计划
-
-### 高优先级 (P0)
-- [ ] config.baseUrl 测试 - 配置解析
-- [ ] providers.presets 测试 - 预设管理
 
 ### 中优先级 (P1)
 - [ ] auth.flow 测试 - HTTP 认证流程
@@ -167,10 +169,12 @@ test result: ok. 298 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 298 个 rcodex 测试通过
+- ✅ 338 个 rcodex 测试通过
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ 核心转换层完全覆盖
 - ✅ Provider 路由完全覆盖 (11 tests)
+- ✅ Provider Presets 完全覆盖 (18 tests)
+- ✅ Config.baseUrl 完全覆盖 (22 tests)
 - ✅ Database Override 覆盖 (6 tests)
 - ✅ Database Auth 覆盖 (6 tests)
 - ✅ Error 增强已覆盖
@@ -179,10 +183,10 @@ test result: ok. 298 passed; 0 failed
 - ✅ Version Check 模块已覆盖 (7 tests)
 
 **代码量**:
-- 新增测试: 119 个 mimo2codex 对齐测试
-- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs
+- 新增测试: 159 个 mimo2codex 对齐测试
+- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs
 
-**测试增长**: 179 → 298 (+119 tests, +66.5%)
+**测试增长**: 179 → 338 (+159 tests, +88.8%)
 
 ---
 

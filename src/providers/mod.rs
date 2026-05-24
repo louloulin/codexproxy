@@ -1,3 +1,4 @@
+//!
 //! Provider abstraction layer
 //!
 //! This module defines the LLMProvider trait and implements providers for:
@@ -6,18 +7,20 @@
 
 #![allow(dead_code)]
 
-use reqwest::{header::HeaderMap, Client, ClientBuilder, Proxy};
-use serde_json::{json, Value};
-use thiserror::Error;
-
 pub mod openai;
+pub mod presets;
 pub mod trait_;
 pub mod zhipu;
 
 // Re-export types
 pub use openai::OpenAIProvider;
+pub use presets::{apply_enhance_error_preset, get_provider_presets, match_preset, EnhancedError, ProviderPreset, ProviderSpec, ProviderFeatures};
 pub use trait_::{LLMProvider, StreamingChat, StreamingResponses};
 pub use zhipu::ZhipuProvider;
+
+use reqwest::{header::HeaderMap, Client, ClientBuilder, Proxy};
+use serde_json::{json, Value};
+use thiserror::Error;
 
 // Re-export SSE utilities for internal use within providers crate
 pub(crate) use openai::{drain_complete_sse_payloads, extract_sse_data_payload};
