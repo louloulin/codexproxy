@@ -8,7 +8,7 @@ pub mod example_proxy;
 #[cfg(test)]
 mod integration_tests {
     use super::example_proxy::CodexProxy;
-    use crate::transform_new::req_to_chat;
+    use crate::transform::req_to_chat;
     use crate::models::response::{ResponsesRequest, Item, MessageItem, ContentBlock, InputText, Tool};
 
     #[test]

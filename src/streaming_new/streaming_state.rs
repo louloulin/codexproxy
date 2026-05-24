@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use crate::models::chat::ChatCompletionChunk;
-use crate::transform_new::thinking::ThinkSplitter;
+use crate::transform::thinking::ThinkSplitter;
 
 /// Accumulated state for a streaming tool call
 #[derive(Debug, Clone)]

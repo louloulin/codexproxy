@@ -8,10 +8,10 @@ use std::sync::Arc;
 
 use crate::models::chat::{ChatRequest, ChatResponse, ChatCompletionChunk};
 use crate::models::response::{ResponsesRequest, ResponsesObject};
-use crate::providers_new::{
+use crate::providers::{
     ProviderRegistry, MimoProvider, ExtendedLLMProvider, ErrorEnhancer, EnhancedError,
 };
-use crate::transform_new::{req_to_chat, chat_to_responses};
+use crate::transform::{req_to_chat, chat_to_responses};
 use crate::streaming_new::SseEventBuilder;
 
 /// A complete Codex proxy implementation using the new architecture
@@ -55,7 +55,7 @@ impl CodexProxy {
     }
 
     /// Get model info for a specific model
-    pub fn get_model_info(&self, model: &str) -> Option<crate::providers_new::ProviderModel> {
+    pub fn get_model_info(&self, model: &str) -> Option<crate::providers::ProviderModel> {
         self.registry.resolve(model).map(|(_, m)| m.clone())
     }
 

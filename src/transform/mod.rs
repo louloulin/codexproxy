@@ -1357,3 +1357,11 @@ mod tests {
         assert_eq!(func.strict, Some(true));
     }
 }
+
+// Additional transformation modules
+pub mod req_to_chat;
+pub mod chat_to_responses;
+pub mod compat;
+pub mod thinking;
+pub mod thinking_inject;
+pub mod image_util;
