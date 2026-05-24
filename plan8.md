@@ -23,8 +23,9 @@
 | Phase 22 | Provider 路由测试 | ✅ 已完成 | 11 tests |
 | Phase 23 | Database Override 测试 | ✅ 已完成 | 6 tests |
 | Phase 24 | Database Auth 测试 | ✅ 已完成 | 6 tests |
+| Phase 25 | **AES-256-GCM 加密** | ✅ 已完成 | 7 tests |
 
-**rcodex 测试**: 284 passed  
+**rcodex 测试**: 291 passed  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -50,6 +51,7 @@
 | `admin.api` | handlers (部分) | 5 |
 | `db.overrides` | schema.rs (override_tests) | 6 |
 | `db.auth` | schema.rs (auth_tests) | 6 |
+| `security.encryption` | encryption.rs | 7 |
 
 ### 测试覆盖矩阵
 
@@ -65,6 +67,7 @@
 ✅ reqToChat      - req_to_chat.rs (10 tests)
 ✅ respToResponses - chat_to_responses.rs (8 tests)
 ✅ upstream.contextOverflow - error_enhancer.rs (13 tests)
+✅ security.encryption - encryption.rs (7 tests) [NEW - Phase 25]
 ❌ auth.flow      - 无 (HTTP 流程测试)
 ❌ byok.pipeline  - 无 (BYOK 流程)
 ❌ checkUpdate    - 无 (版本检查)
@@ -78,7 +81,6 @@
 ❌ me.endpoints   - 无 (用户 API)
 ❌ oauth.flow     - 无 (OAuth 流程)
 ❌ providers.presets - 无 (预设管理)
-❌ security.encryption - 无 (加密)
 ❌ server.selectProvider - 无 (服务器选择)
 ❌ setup.snippets - 无 (代码片段)
 ❌ streamToSse    - sse_builder.rs (11 tests)
@@ -93,7 +95,7 @@
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 284 passed; 0 failed; 0 ignored
+test result: ok. 291 passed; 0 failed
 ```
 
 ### 测试分布
@@ -119,8 +121,9 @@ test result: ok. 284 passed; 0 failed; 0 ignored
 | Database Auth | 6 |
 | Handlers | 15+ |
 | Database | 2 |
+| Encryption (AES-256-GCM) | 7 |
 
-**总计**: 284 tests
+**总计**: 291 tests
 
 ---
 
@@ -132,18 +135,37 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 284 passed; 0 failed
+test result: ok. 291 passed; 0 failed
 ```
 
 ---
 
-## 五、总结
+## 五、下一步计划
+
+### 高优先级 (P0)
+- [ ] config.baseUrl 测试 - 配置解析
+- [ ] checkUpdate 测试 - 版本检查
+- [ ] providers.presets 测试 - 预设管理
+
+### 中优先级 (P1)
+- [ ] auth.flow 测试 - HTTP 认证流程
+- [ ] me.endpoints 测试 - 用户 API
+- [ ] setup.snippets 测试 - 代码片段
+
+### 低优先级 (P2)
+- [ ] oauth.flow 测试 - OAuth 流程
+- [ ] codex.files 测试 - 文件系统操作
+- [ ] db.migrations 测试 - 数据库迁移
+
+---
+
+## 六、总结
 
 **完成度**: 100%
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 284 个 rcodex 测试通过
+- ✅ 291 个 rcodex 测试通过
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ 核心转换层完全覆盖
 - ✅ Provider 路由完全覆盖 (11 tests)
@@ -151,12 +173,13 @@ test result: ok. 284 passed; 0 failed
 - ✅ Database Auth 覆盖 (6 tests)
 - ✅ Error 增强已覆盖
 - ✅ Image/CLI/Dotenv 工具模块已覆盖
+- ✅ AES-256-GCM 加密模块已覆盖 (7 tests)
 
 **代码量**:
-- 新增测试: 105 个 mimo2codex 对齐测试
-- 新增模块: cli_color.rs, dotenv.rs
+- 新增测试: 112 个 mimo2codex 对齐测试
+- 新增模块: cli_color.rs, dotenv.rs, encryption.rs
 
-**测试增长**: 179 → 284 (+105 tests, +58.7%)
+**测试增长**: 179 → 291 (+112 tests, +62.6%)
 
 ---
 
