@@ -7,9 +7,12 @@
 //! - Tool/function conversion
 //! - Reasoning mode handling
 //! - Streaming chunk aggregation
+//! - MiniMax/MiMo compatibility features
 
 pub mod req_to_chat;
 pub mod chat_to_responses;
+pub mod compat;
 
 pub use req_to_chat::{responses_to_chat, ReqToChatOptions};
 pub use chat_to_responses::{chat_to_responses, ChatToResponsesOptions, chat_chunks_to_responses_output};
+pub use compat::{apply_compat, CompatOptions};
