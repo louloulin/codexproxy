@@ -19,7 +19,7 @@
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
 
-**总计测试**: 156 passed
+**总计测试**: 160 passed
 
 ---
 
@@ -154,6 +154,10 @@ pub async fn download_and_cache_image(url: &str, cache_dir: &Path) -> Result<Str
 
 
 
+---
+
+
+
 ## 三、新增 mimo2codex 对齐测试
 
 | 测试模块 | 测试数量 | 覆盖功能 |
@@ -161,6 +165,7 @@ pub async fn download_and_cache_image(url: &str, cache_dir: &Path) -> Result<Str
 | error_enhancer::mimo2codex_tests | 13 | ContextOverflow 检测、WebSearch 错误检测 |
 | thinking (新增) | 9 | Inline Think 提取、标签分割、流式处理 |
 | compat (新增) | 3 | MiniMax 兼容性转换 |
+| req_to_chat (新增) | 4 | Request 转换、消息处理 |
 
 **新增测试分布**:
 - ContextOverflow 检测: 12 tests
@@ -168,13 +173,14 @@ pub async fn download_and_cache_image(url: &str, cache_dir: &Path) -> Result<Str
 - Inline Think 提取: 4 tests
 - ThinkSplitter 流式: 5 tests
 - MiniMax Compat: 3 tests
+- ReqToChat 转换: 4 tests
 
 ---
 
 ## 三、测试覆盖
 
 ```
-test result: ok. 156 passed; 0 failed; 0 ignored
+test result: ok. 160 passed; 0 failed; 0 ignored
 ```
 
 **测试分布**:
@@ -215,7 +221,7 @@ cargo test --lib - 133 passed ✅
 
 **总新增**: ~2600 行
 
-**测试**: 156 passed (新增 mimo2codex 对齐测试 23 个)
+**测试**: 160 passed (新增 mimo2codex 对齐测试 27 个)
 
 **主要差异已消除**:
 - ✅ Generic Provider JSON 配置

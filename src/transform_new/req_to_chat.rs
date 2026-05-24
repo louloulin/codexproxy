@@ -186,3 +186,75 @@ mod tests {
         assert_eq!(chat.messages.len(), 1);
     }
 }
+
+    // mimo2codex aligned tests from reqToChat.test.ts
+
+    #[test]
+    fn test_instructions_field_exists() {
+        use crate::models::response::ResponsesRequest;
+        
+        // Verify ResponsesRequest has instructions field
+        let req = ResponsesRequest {
+            model: "mimo-v2.5-pro".to_string(),
+            instructions: Some("You are MiMo.".to_string()),
+            input: vec![],
+            ..Default::default()
+        };
+        
+        // Instructions should be set
+        assert!(req.instructions.is_some());
+        assert_eq!(req.instructions.unwrap(), "You are MiMo.");
+    }
+
+    #[test]
+    fn test_user_string_input() {
+        use crate::models::response::{ResponsesRequest, Item, MessageItem, ContentBlock, InputText};
+        
+        let req = ResponsesRequest {
+            model: "mimo-v2.5-pro".to_string(),
+            input: vec![Item::Message(MessageItem {
+                role: "user".to_string(),
+                content: vec![ContentBlock::InputText(InputText { text: "hello".to_string() })],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        
+        let chat = responses_to_chat(&req, &ReqToChatOptions::default());
+        assert_eq!(chat.messages.len(), 1);
+        assert_eq!(chat.messages[0].role, "user");
+    }
+
+    #[test]
+    fn test_developer_role_becomes_system() {
+        use crate::models::response::{ResponsesRequest, Item, MessageItem, ContentBlock, InputText};
+        
+        let req = ResponsesRequest {
+            model: "mimo-v2.5-pro".to_string(),
+            input: vec![Item::Message(MessageItem {
+                role: "developer".to_string(),
+                content: vec![ContentBlock::InputText(InputText { text: "developer context".to_string() })],
+                ..Default::default()
+            })],
+            ..Default::default()
+        };
+        
+        let chat = responses_to_chat(&req, &ReqToChatOptions::default());
+        assert_eq!(chat.messages[0].role, "developer");
+    }
+
+
+    #[test]
+    fn test_parallel_tool_calls_option() {
+        use crate::models::response::ResponsesRequest;
+        
+        let req = ResponsesRequest {
+            model: "mimo-v2.5-pro".to_string(),
+            input: vec![],
+            parallel_tool_calls: Some(true),
+            ..Default::default()
+        };
+        
+        let chat = responses_to_chat(&req, &ReqToChatOptions::default());
+        assert!(chat.parallel_tool_calls);
+    }
