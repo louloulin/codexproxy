@@ -267,4 +267,88 @@ mod tests {
             None
         );
     }
+
+    
+    // Additional mimo2codex aligned tests for image handling
+    
+    #[test]
+    fn test_parse_gif_url() {
+        let url = "https://example.com/animated.gif";
+        let (url_type, parsed, _) = parse_image_url(url);
+        
+        assert_eq!(url_type, ImageUrlType::HttpUrl);
+        assert!(parsed.contains("animated.gif"));
+    }
+    
+    #[test]
+    fn test_parse_webp_url() {
+        let url = "https://cdn.example.com/photo.webp";
+        let (url_type, parsed, _) = parse_image_url(url);
+        
+        assert_eq!(url_type, ImageUrlType::HttpUrl);
+        assert!(parsed.contains("photo.webp"));
+    }
+    
+    #[test]
+    fn test_parse_file_url() {
+        let url = "file:///tmp/image.png";
+        let (url_type, parsed, _) = parse_image_url(url);
+        
+        assert_eq!(url_type, ImageUrlType::FileUrl);
+        assert!(parsed.contains("image.png"));
+    }
+    
+    #[test]
+    fn test_parse_jpeg_base64() {
+        let url = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+        let (url_type, _, media_type) = parse_image_url(url);
+        
+        assert_eq!(url_type, ImageUrlType::DataUrl);
+        assert!(media_type.unwrap().starts_with("image/jpeg"));
+    }
+    
+    #[test]
+    fn test_parse_gif_base64() {
+        let url = "data:image/gif;base64,R0lGODlh";
+        let (url_type, _, media_type) = parse_image_url(url);
+        
+        assert_eq!(url_type, ImageUrlType::DataUrl);
+        assert!(media_type.unwrap().starts_with("image/gif"));
+    }
+    
+    #[test]
+    fn test_parse_webp_base64() {
+        let url = "data:image/webp;base64,UklGRlYAAABX";
+        let (url_type, _, media_type) = parse_image_url(url);
+        
+        assert_eq!(url_type, ImageUrlType::DataUrl);
+        assert!(media_type.unwrap().starts_with("image/webp"));
+    }
+    
+    #[test]
+    fn test_image_format_from_magic_jpeg() {
+        // JPEG SOI marker
+        assert_eq!(
+            ImageFormat::from_magic_bytes(&[0xFF, 0xD8, 0xFF, 0xDB]),
+            Some(ImageFormat::Jpeg)
+        );
+    }
+    
+    #[test]
+    fn test_image_format_from_magic_gif87() {
+        // GIF87a
+        assert_eq!(
+            ImageFormat::from_magic_bytes(&[0x47, 0x49, 0x46, 0x38, 0x37, 0x61]),
+            Some(ImageFormat::Gif)
+        );
+    }
+    
+    #[test]
+    fn test_image_format_from_magic_gif89() {
+        // GIF89a
+        assert_eq!(
+            ImageFormat::from_magic_bytes(&[0x47, 0x49, 0x46, 0x38, 0x39, 0x61]),
+            Some(ImageFormat::Gif)
+        );
+    }
 }

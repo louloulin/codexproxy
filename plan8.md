@@ -19,7 +19,7 @@
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
 
-**rcodex 测试**: 222 passed (持续增长)  
+**rcodex 测试**: 231 passed (持续增长)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -38,17 +38,26 @@
 | `providers.generic.test.ts` | `providers_new/generic_provider.rs` | ✅ | 5 |
 | `providers.deepseek.test.ts` | `providers_new/mimo.rs` | ✅ | 8 |
 | `redact.test.ts` | `util/redact.rs` | ✅ | 7 |
+| `image handling` | `transform_new/image_util.rs` | ✅ | 13 |
 
 ### 新增 mimo2codex 对齐测试
 
-#### ChatToResponses Tests (8 tests)
+#### Image Util Tests (13 tests)
 ```rust
-// chat_to_responses.rs - mimo2codex aligned
-test_chat_to_responses_plain_text - 验证普通文本转换
-test_chat_to_responses_with_reasoning - 验证 reasoning 转换
-test_chat_to_responses_with_function_call - 验证函数调用转换
-test_chat_to_responses_with_usage - 验证 usage 字段转换
-test_chat_to_responses_incomplete - 验证不完整响应处理
+// image_util.rs - mimo2codex aligned
+test_parse_data_url - 验证 data URL 解析
+test_parse_http_url - 验证 HTTP URL 解析
+test_parse_file_url - 验证文件 URL 解析
+test_parse_jpeg_base64 - 验证 JPEG base64 解析
+test_parse_gif_base64 - 验证 GIF base64 解析
+test_parse_webp_base64 - 验证 WebP base64 解析
+test_parse_gif_url - 验证 GIF URL 解析
+test_parse_webp_url - 验证 WebP URL 解析
+test_needs_materialization - 验证材料化需求检测
+test_image_format_detection - 验证图片格式检测
+test_image_format_from_magic_jpeg - 验证 JPEG magic bytes
+test_image_format_from_magic_gif87 - 验证 GIF87a magic bytes
+test_image_format_from_magic_gif89 - 验证 GIF89a magic bytes
 ```
 
 ---
@@ -58,7 +67,7 @@ test_chat_to_responses_incomplete - 验证不完整响应处理
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 222 passed; 0 failed; 0 ignored
+test result: ok. 231 passed; 0 failed; 0 ignored
 ```
 
 ### 测试分布
@@ -76,11 +85,12 @@ test result: ok. 222 passed; 0 failed; 0 ignored
 | Compat | 6 |
 | Redact | 7 |
 | MiMo Provider | 8 |
+| Image Util | 13 |
 | Transform layer | 30+ |
 | Handlers | 15+ |
 | Database | 2 |
 
-**总计**: 222 tests
+**总计**: 231 tests
 
 ---
 
@@ -92,7 +102,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 222 passed; 0 failed
+test result: ok. 231 passed; 0 failed
 ```
 
 ---
@@ -113,6 +123,7 @@ test result: ok. 222 passed; 0 failed
 | 模型别名解析 | 严格匹配 + 别名 | 严格匹配 + 别名 | ✅ |
 | MiMo Provider | Thinking 配置 | Thinking 配置 | ✅ |
 | ChatToResponses | 响应转换 | 响应转换 | ✅ |
+| Image Handling | 图片格式检测 | 图片格式检测 (PNG/JPEG/GIF/WebP) | ✅ |
 
 ---
 
@@ -122,7 +133,7 @@ test result: ok. 222 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 222 个 rcodex 测试通过 (持续增长)
+- ✅ 231 个 rcodex 测试通过 (持续增长)
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ Generic Provider mimo2codex 对齐测试 (5 tests)
 - ✅ MiMo Provider mimo2codex 对齐测试 (8 tests)
@@ -130,11 +141,12 @@ test result: ok. 222 passed; 0 failed
 - ✅ ReqToChat mimo2codex 对齐测试 (10 tests)
 - ✅ Streaming State mimo2codex 对齐测试 (8 tests)
 - ✅ ChatToResponses mimo2codex 对齐测试 (8 tests)
+- ✅ Image Util mimo2codex 对齐测试 (13 tests)
 
 **代码量**:
-- 新增测试: 43 个 mimo2codex 对齐测试
+- 新增测试: 52 个 mimo2codex 对齐测试
 
-**测试增长**: 179 → 222 (+43 tests, +24.0%)
+**测试增长**: 179 → 231 (+52 tests, +29.1%)
 
 **下一步 (可选 P2)**:
 - 日志系统完善
