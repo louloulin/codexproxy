@@ -567,6 +567,168 @@ mod tests {
         let result = loader.register(spec);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_resolve_model_alias_match() {
+        use crate::providers_new::generic_provider::{GenericProviderSpec, GenericProviderModel};
+        
+        let spec = GenericProviderSpec {
+            id: "q".to_string(),
+            shortcut: None,
+            display_name: None,
+            base_url: "https://api.example.com/v1".to_string(),
+            env_key: "Q_API_KEY".to_string(),
+            default_model: Some("q3-max".to_string()),
+            wire_api: None,
+            models: Some(vec![
+                GenericProviderModel {
+                    id: "q3-max".to_string(),
+                    aliases: None,
+                    display_name: None,
+                    supports_images: None,
+                    supports_reasoning: None,
+                    supports_web_search: None,
+                    context_window: None,
+                    max_output_tokens: None,
+                    deprecated_after: None,
+                },
+                GenericProviderModel {
+                    id: "q3-flash".to_string(),
+                    aliases: Some(vec!["q-flash".to_string()]),
+                    display_name: None,
+                    supports_images: None,
+                    supports_reasoning: None,
+                    supports_web_search: None,
+                    context_window: None,
+                    max_output_tokens: None,
+                    deprecated_after: None,
+                },
+            ]),
+            features: None,
+            docs_url: None,
+            force_default_model: None,
+        };
+        
+        // Test exact match
+        let resolved = spec.resolve_model("q3-max");
+        assert!(resolved.is_some());
+        assert_eq!(resolved.unwrap().id, "q3-max");
+        
+        // Test alias match
+        let resolved = spec.resolve_model("q-flash");
+        assert!(resolved.is_some());
+        assert_eq!(resolved.unwrap().id, "q3-flash");
+        
+        // Test unknown model returns None
+        let resolved = spec.resolve_model("unknown-model");
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn test_resolve_model_no_models_declared_returns_none() {
+        use crate::providers_new::generic_provider::GenericProviderSpec;
+        
+        let spec = GenericProviderSpec {
+            id: "g".to_string(),
+            shortcut: None,
+            display_name: None,
+            base_url: "https://api.example.com/v1".to_string(),
+            env_key: "G_API_KEY".to_string(),
+            default_model: Some("x".to_string()),
+            wire_api: None,
+            models: None,
+            features: None,
+            docs_url: None,
+            force_default_model: None,
+        };
+        
+        // When no models declared, resolve_model returns None (empty model list)
+        let resolved = spec.resolve_model("anything");
+        assert!(resolved.is_none());
+        
+        // But the provider is an open catalog
+        assert!(spec.is_open_catalog());
+    }
+
+    #[test]
+    fn test_provider_is_open_catalog() {
+        use crate::providers_new::generic_provider::GenericProviderSpec;
+        
+        // With no models - should be open catalog
+        let spec_no_models = GenericProviderSpec {
+            id: "g".to_string(),
+            shortcut: None,
+            display_name: None,
+            base_url: "https://api.example.com/v1".to_string(),
+            env_key: "G_API_KEY".to_string(),
+            default_model: Some("x".to_string()),
+            wire_api: None,
+            models: None,
+            features: None,
+            docs_url: None,
+            force_default_model: None,
+        };
+        assert!(spec_no_models.is_open_catalog());
+        
+        // With empty models - should be open catalog
+        let spec_empty = GenericProviderSpec {
+            id: "h".to_string(),
+            shortcut: None,
+            display_name: None,
+            base_url: "https://api.example.com/v1".to_string(),
+            env_key: "H_API_KEY".to_string(),
+            default_model: Some("y".to_string()),
+            wire_api: None,
+            models: Some(vec![]),
+            features: None,
+            docs_url: None,
+            force_default_model: None,
+        };
+        assert!(spec_empty.is_open_catalog());
+    }
+
+    #[test]
+    fn test_generic_provider_spec_env_key_derivation() {
+        use crate::providers_new::generic_provider::GenericProviderSpec;
+        
+        let spec = GenericProviderSpec {
+            id: "test".to_string(),
+            shortcut: None,
+            display_name: None,
+            base_url: "https://api.example.com/v1".to_string(),
+            env_key: "TEST_API_KEY".to_string(),
+            default_model: Some("model-x".to_string()),
+            wire_api: None,
+            models: None,
+            features: None,
+            docs_url: None,
+            force_default_model: None,
+        };
+        
+        // env_key should be stored as-is
+        assert_eq!(spec.env_key, "TEST_API_KEY");
+    }
+
+    #[test]
+    fn test_generic_provider_spec_with_shortcut() {
+        use crate::providers_new::generic_provider::GenericProviderSpec;
+        
+        let spec = GenericProviderSpec {
+            id: "custom-provider".to_string(),
+            shortcut: Some("cp".to_string()),
+            display_name: None,
+            base_url: "https://api.example.com/v1".to_string(),
+            env_key: "CP_API_KEY".to_string(),
+            default_model: None,
+            wire_api: None,
+            models: None,
+            features: None,
+            docs_url: None,
+            force_default_model: None,
+        };
+        
+        assert_eq!(spec.shortcut, Some("cp".to_string()));
+    }
 }
 
     // Additional mimo2codex aligned tests

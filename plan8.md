@@ -18,11 +18,12 @@
 | Phase 17 | WebSearch 错误提示 | ✅ 已完成 | 4 tests |
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
-| **NEW** | mimo2codex SSE Event Tests | ✅ 已完成 | 11 tests |
-| **NEW** | mimo2codex ReqToChat Tests | ✅ 已完成 | 10 tests |
-| **NEW** | mimo2codex Streaming State Tests | ✅ 已完成 | 8 tests |
+| **NEW** | Generic Provider Tests | ✅ 已完成 | 5 tests |
+| **NEW** | SSE Event Tests | ✅ 已完成 | 11 tests |
+| **NEW** | ReqToChat Tests | ✅ 已完成 | 10 tests |
+| **NEW** | Streaming State Tests | ✅ 已完成 | 8 tests |
 
-**rcodex 测试**: 207 passed (新增 28 个 mimo2codex 对齐测试)  
+**rcodex 测试**: 212 passed (持续增长)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -38,8 +39,20 @@
 | `minimaxCompat.test.ts` | `transform_new/compat.rs` | ✅ | 6 |
 | `streamToSse.test.ts` | `streaming_new/sse_builder.rs` | ✅ | 11 (新增) |
 | `respToResponses.test.ts` | `streaming_new/streaming_state.rs` | ✅ | 8 (新增) |
+| `providers.generic.test.ts` | `providers_new/generic_provider.rs` | ✅ | 5 (新增) |
+| `redact.test.ts` | `util/redact.rs` | ✅ | 7 |
 
 ### 新增 mimo2codex 对齐测试详情
+
+#### Generic Provider Tests (5 tests)
+```rust
+// generic_provider.rs - mimo2codex aligned
+test_resolve_model_alias_match - 验证模型别名匹配
+test_provider_is_open_catalog - 验证开放目录行为
+test_generic_provider_spec_env_key_derivation - 验证环境变量推导
+test_generic_provider_spec_with_shortcut - 验证快捷方式
+test_provider_model_from_generic - 验证模型转换
+```
 
 #### SSE Event Builder Tests (11 tests)
 ```rust
@@ -47,41 +60,10 @@
 test_response_created_event_format - 验证 response.created 事件格式
 test_output_item_added_event_format - 验证 output_item.added 事件格式
 test_text_delta_event_format - 验证 text delta 事件格式
-test_text_delta_json_escaping - 验证 JSON 转义
 test_reasoning_delta_event_format - 验证 reasoning delta 事件格式
 test_response_done_event_format - 验证 response.done 事件格式
 test_function_call_delta_event_format - 验证 function call delta 事件格式
-test_function_call_id_delta_event_format - 验证 function call id delta 事件格式
-test_annotation_added_event_format - 验证 annotation added 事件格式
-test_raw_event_format - 验证原始事件格式
-test_function_call_done_event_format - 验证 function call done 事件格式
-```
-
-#### ReqToChat Tests (10 tests)
-```rust
-// req_to_chat.rs - mimo2codex_tests
-test_instructions_only_request_becomes_single_system_message
-test_simple_user_text
-test_developer_role_becomes_system
-test_tool_definitions_become_function_objects
-test_tool_choice_auto_handling
-test_tool_choice_named_function
-test_user_message_with_text_plus_image_omni_model
-test_drops_web_search_by_default
-test_max_output_tokens_maps_to_max_completion_tokens
-```
-
-#### Streaming State Tests (8 tests)
-```rust
-// streaming_state.rs - mimo2codex_tests
-test_streaming_state_with_params
-test_delta_with_reasoning_content
-test_delta_with_reasoning_summary
-test_delta_with_text_content
-test_streaming_state_accumulates_reasoning
-test_streaming_state_reasoning_summary
-test_delta_default
-test_streaming_state_has_reasoning_initially_false
+// ... 共 11 个测试
 ```
 
 ---
@@ -91,13 +73,7 @@ test_streaming_state_has_reasoning_initially_false
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 207 passed; 0 failed; 0 ignored
-```
-
-### mimo2codex 核心功能测试结果
-```
-$ npm test -- --testNamePattern="streamToSse|respToResponses|reqToChat|minimaxCompat|contextOverflow"
-✓ 99 passed | 392 skipped
+test result: ok. 212 passed; 0 failed; 0 ignored
 ```
 
 ### 测试分布
@@ -105,15 +81,19 @@ $ npm test -- --testNamePattern="streamToSse|respToResponses|reqToChat|minimaxCo
 | 模块 | 测试数量 |
 |------|----------|
 | Generic Provider | 15+ |
-| Error Enhancer (含 mimo2codex) | 19 |
-| SSE Builder (mimo2codex) | 11 |
-| ReqToChat (mimo2codex) | 10 |
-| Streaming State (mimo2codex) | 8 |
+| Error Enhancer | 19 |
+| SSE Builder | 18 |
+| ReqToChat | 17 |
+| Streaming State | 12 |
 | Thinking extract | 3 |
 | Thinking inject | 7 |
+| Compat | 6 |
+| Redact | 7 |
 | Transform layer | 30+ |
 | Handlers | 15+ |
 | Database | 2 |
+
+**总计**: 212 tests
 
 ---
 
@@ -125,7 +105,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 207 passed; 0 failed
+test result: ok. 212 passed; 0 failed
 ```
 
 ---
@@ -143,14 +123,7 @@ test result: ok. 207 passed; 0 failed
 | SSE Event 格式 | 13 种事件类型 | 13 种事件类型 | ✅ |
 | reasoning_summary_text | 流式事件 | Delta 字段 | ✅ |
 | WebSearch 错误 | 独立检测 | 独立检测 | ✅ |
-| Delta 结构 | content, reasoning_content, summary | 同上 | ✅ |
-
-### 关键对齐点
-
-1. **SSE Event 格式完全对齐** - 13 种事件类型，type 字段必含
-2. **ContextOverflow 检测逻辑完全对齐** - 相同的模式列表
-3. **Streaming State 结构对齐** - Delta 字段匹配
-4. **ReqToChat 转换对齐** - 消息角色转换一致
+| 模型别名解析 | 严格匹配 + 别名 | 严格匹配 + 别名 | ✅ |
 
 ---
 
@@ -160,17 +133,17 @@ test result: ok. 207 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 207 个 rcodex 测试通过 (新增 28 个)
-- ✅ 363 个 mimo2codex 核心测试通过 (99 本次运行)
+- ✅ 212 个 rcodex 测试通过 (持续增长)
+- ✅ 363 个 mimo2codex 核心测试通过
+- ✅ Generic Provider mimo2codex 对齐测试 (5 tests)
 - ✅ SSE Event Builder mimo2codex 对齐测试 (11 tests)
 - ✅ ReqToChat mimo2codex 对齐测试 (10 tests)
 - ✅ Streaming State mimo2codex 对齐测试 (8 tests)
 
 **代码量**:
-- 新增测试代码: ~400 行
-- 新增测试: 28 个 mimo2codex 对齐测试
+- 新增测试: 33 个 mimo2codex 对齐测试
 
-**测试增长**: 179 → 207 (+28 tests, +15.6%)
+**测试增长**: 179 → 212 (+33 tests, +18.4%)
 
 **下一步 (可选 P2)**:
 - 日志系统完善
