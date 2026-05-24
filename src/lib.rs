@@ -8,6 +8,7 @@ pub mod auth;           // Authentication module
 pub mod codex;         // Codex file system module
 pub mod config;
 pub mod db;
+pub use db::codex_history::{CodexHistoryStore, CodexHistoryEntry, HistoryKind};
 pub mod error;
 pub mod error_response;
 pub mod handlers;

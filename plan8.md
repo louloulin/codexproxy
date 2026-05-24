@@ -34,8 +34,9 @@
 | Phase 33 | **Update Method 检测** | ✅ 已完成 | 6 tests |
 | Phase 34 | **Proxy Dispatcher** | ✅ 已完成 | 8 tests |
 | Phase 35 | **Provider Routing** | ✅ 已完成 | 10 tests |
+| Phase 36 | **Codex History (list 修复)** | ✅ 已完成 | 7 tests |
 
-**rcodex 测试**: 415 passed (单线程)  
+**rcodex 测试**: 421 passed (单线程)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -45,7 +46,7 @@
 ### rcodex 测试结果 (单线程运行)
 ```
 $ cargo test --lib -- --test-threads=1
-test result: ok. 397 passed; 0 failed
+test result: ok. 421 passed; 0 failed
 ```
 
 ### Update Method 模块 (Phase 33)
@@ -93,8 +94,9 @@ test result: ok. 397 passed; 0 failed
 | Update Method | 6 |
 | Proxy Dispatcher | 8 |
 | Provider Routing | 10 |
+| **Codex History** | **7** |
 
-**总计**: 415 tests
+**总计**: 421 tests
 
 ---
 
@@ -129,6 +131,7 @@ test result: ok. 397 passed; 0 failed
 | `codex.files` | codex/mod.rs | 11 |
 | `codex.state` | codex/state.rs | 7 |
 | `updateMethod` | setup/update_method.rs | 6 |
+| `db.codexHistory` | codex_history.rs | 7 |
 
 ### 测试覆盖矩阵
 
@@ -155,14 +158,13 @@ test result: ok. 397 passed; 0 failed
 ✅ codex.state - codex/state.rs (7 tests)
 ✅ updateMethod - setup/update_method.rs (6 tests)
 ✅ upstream.proxyDispatcher - upstream/mod.rs (8 tests)
+✅ db.codexHistory - codex_history.rs (7 tests)
 ❌ byok.pipeline  - 无 (BYOK 流程)
-❌ codex.history.api - 无 (历史 API)
-❌ db.codexHistory - 无 (历史记录)
+❌ codex.history.api - 无 (历史 API 端点)
 ❌ db.migrations  - 无 (数据库迁移)
 ❌ db.oauth       - 无 (OAuth)
 ❌ oauth.flow     - 无 (OAuth 流程)
-✅ server.selectProvider - providers/routing.rs (10 tests)
-❌ upstream.proxyDispatcher - 无 (代理调度)
+❌ server.selectProvider - 无 (服务器选择 Provider)
 ```
 
 ---
@@ -175,7 +177,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib -- --test-threads=1
-test result: ok. 397 passed; 0 failed
+test result: ok. 421 passed; 0 failed
 ```
 
 **注意**: Codex 模块测试需要 `--test-threads=1` 以避免环境变量污染问题。
@@ -188,7 +190,7 @@ test result: ok. 397 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1/P2 功能已实现
-- ✅ 397 个 rcodex 测试通过 (单线程)
+- ✅ 421 个 rcodex 测试通过 (单线程)
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ 核心转换层完全覆盖
 - ✅ Provider 路由完全覆盖 (11 tests)
@@ -206,14 +208,15 @@ test result: ok. 397 passed; 0 failed
 - ✅ Codex 文件管理完全覆盖 (11 tests)
 - ✅ Codex 状态管理完全覆盖 (7 tests)
 - ✅ Update Method 检测完全覆盖 (6 tests)
+- ✅ Codex History 完全覆盖 (7 tests)
 
 **代码量**:
 - 新增测试: 218 个 mimo2codex 对齐测试
-- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs, auth/mod.rs, auth/me.rs, setup/mod.rs, codex/mod.rs, codex/state.rs, setup/update_method.rs
+- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs, auth/mod.rs, auth/me.rs, setup/mod.rs, codex/mod.rs, codex/state.rs, setup/update_method.rs, codex_history.rs
 
-**测试增长**: 179 → 415 (+236 tests, +131.8%)
+**测试增长**: 179 → 421 (+242 tests, +135.2%)
 
-**mimo2codex 对齐率**: 28/32 模块 (87.5%)
+**mimo2codex 对齐率**: 29/35 模块 (82.9%)
 
 ---
 
@@ -221,8 +224,7 @@ test result: ok. 397 passed; 0 failed
 
 ### 优先级 P3 (可选功能)
 - [ ] BYOK Pipeline 流程
-- [ ] Codex 历史 API
-- [ ] 数据库历史记录
+- [ ] Codex 历史 API 端点
 - [ ] 数据库迁移
 - [ ] OAuth 流程
 - [ ] 服务器选择 Provider
