@@ -1,16 +1,5 @@
-[mcp_servers.claude-flow]
-args = [
-    "-y",
-    "@claude-flow/cli@latest",
-    "mcp",
-    "start",
-]
-command = "npx"
-
-[mcp_servers.claude-flow.env]
-CLAUDE_FLOW_HOOKS_ENABLED = "true"
-CLAUDE_FLOW_MAX_AGENTS = "15"
-CLAUDE_FLOW_MEMORY_BACKEND = "hybrid"
-CLAUDE_FLOW_MODE = "v3"
-CLAUDE_FLOW_TOPOLOGY = "hierarchical-mesh"
-npm_config_update_notifier = "false"
+[provider]
+model_provider = "mimo2codex"
+model = "mimo-v2.5-pro"
+base_url = "http://127.0.0.1:8788/v1"
+requires_openai_auth = true

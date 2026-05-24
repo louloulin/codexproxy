@@ -5,6 +5,7 @@
 //! OpenAI Chat Completions API and Responses API formats.
 
 pub mod auth;           // Authentication module
+pub mod codex;         // Codex file system module
 pub mod config;
 pub mod db;
 pub mod error;
@@ -17,15 +18,16 @@ pub mod protocol;
 pub mod providers;
 pub mod providers_new; // New provider architecture
 pub mod server;
-pub mod setup;         // Setup snippets module
+pub mod setup;          // Setup snippets module
 pub mod sse;
-pub mod streaming_new; // New streaming SSE layer
+pub mod streaming_new;  // New streaming SSE layer
 pub mod transform;
 pub mod transform_new;  // New complete transform layer
-pub mod util;          // Utility modules
+pub mod util;           // Utility modules
 
 // Re-export commonly used types
 pub use auth::{AuthContext, AuthMode, AuthGuardResult, check_auth};
+pub use codex::{apply_codex, codex_dir, atomic_write, backup_file};
 pub use config::Config;
 pub use error::Error;
 pub use handlers::AppState;
