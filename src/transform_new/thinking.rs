@@ -210,3 +210,73 @@ mod tests {
         assert!(is_complete);
     }
 }
+
+// Additional tests matching mimo2codex/test/minimaxCompat.test.ts inline think tests
+
+    #[test]
+    fn test_split_inline_think_empty() {
+        let (content, reasoning) = extract_inline_think("");
+        assert_eq!(content, "");
+        assert!(reasoning.is_none());
+    }
+
+    #[test]
+    fn test_split_inline_think_case_sensitive() {
+        // Uppercase should NOT match (case-sensitive)
+        let (content, reasoning) = extract_inline_think("<THINK>not stripped</THINK>");
+        assert!(reasoning.is_none());
+        assert!(content.contains("<THINK>not stripped</THINK>"));
+    }
+
+    #[test]
+    fn test_think_splitter_process_chunk() {
+        let mut splitter = ThinkSplitter::new();
+        
+        // Test complete think block in single chunk
+        let (content, reasoning, _) = splitter.process_chunk("<think>thinking...</think>visible answer");
+        assert!(content.contains("visible"));
+        assert!(!content.contains("<think>"));
+        assert!(reasoning.is_some());
+        assert!(reasoning.unwrap().contains("thinking..."));
+    }
+
+    #[test]
+    fn test_think_splitter_plain_content() {
+        let mut splitter = ThinkSplitter::new();
+        
+        let (content, reasoning, _) = splitter.process_chunk("plain text without tags");
+        assert_eq!(content, "plain text without tags");
+        assert!(reasoning.is_none());
+    }
+
+    #[test]
+    fn test_think_splitter_multiple_blocks() {
+        let mut splitter = ThinkSplitter::new();
+        
+        // First block
+        splitter.process_chunk("<think>a</think>");
+        let r2 = splitter.process_chunk("between");
+        assert!(r2.0.contains("between"));
+        
+        // Second block
+        let r3 = splitter.process_chunk("<think>b</think>after");
+        assert!(r3.0.contains("after"));
+        assert!(r3.1.is_some());
+    }
+
+    #[test]
+    fn test_extract_think_content_only() {
+        let content = "<think>reasoning1</think>answer<think>reasoning2</think>end";
+        let result = extract_think_content(content);
+        assert!(result.is_some());
+        let reasoning = result.unwrap();
+        assert!(reasoning.contains("reasoning1"));
+        assert!(reasoning.contains("reasoning2"));
+    }
+
+    #[test]
+    fn test_count_think_tags() {
+        assert_eq!(count_think_tags("<think>a</think><think>b</think>"), 2);
+        assert_eq!(count_think_tags("no tags here"), 0);
+        assert_eq!(count_think_tags("<think>unclosed"), 1);
+    }

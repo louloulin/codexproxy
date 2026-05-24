@@ -263,3 +263,93 @@ mod tests {
         assert!(opts.merge_system_messages);
     }
 }
+
+// Additional tests matching mimo2codex/test/minimaxCompat.test.ts
+
+    #[test]
+    fn test_minimax_compat_merges_system_messages() {
+        use crate::models::chat::{ChatRequest, Message};
+        
+        let mut chat = ChatRequest::default();
+        chat.messages = vec![
+            Message {
+                role: "system".to_string(),
+                content: Some("System 1".to_string()),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            },
+            Message {
+                role: "user".to_string(),
+                content: Some("Hello".to_string()),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            },
+            Message {
+                role: "system".to_string(),
+                content: Some("System 2".to_string()),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            },
+        ];
+        
+        let opts = CompatOptions::minimax_compat();
+        apply_compat(&mut chat, &opts);
+        
+        // Should have 2 messages: one merged system and one user
+        let system_count = chat.messages.iter().filter(|m| m.role == "system").count();
+        assert_eq!(system_count, 1);
+        
+        // System message should contain both contents
+        let system_msg = chat.messages.iter().find(|m| m.role == "system").unwrap();
+        assert!(system_msg.content.as_ref().unwrap().contains("System 1"));
+        assert!(system_msg.content.as_ref().unwrap().contains("System 2"));
+    }
+    
+    #[test]
+    fn test_minimax_compat_drops_tool_choice_auto() {
+        use crate::models::chat::{ChatRequest, Message, ToolChoice};
+        
+        let mut chat = ChatRequest::default();
+        chat.messages = vec![
+            Message {
+                role: "user".to_string(),
+                content: Some("Hello".to_string()),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            },
+        ];
+        chat.tool_choice = Some(ToolChoice::String("auto".to_string()));
+        
+        let opts = CompatOptions::minimax_compat();
+        apply_compat(&mut chat, &opts);
+        
+        // tool_choice should be removed when set to "auto"
+        assert!(chat.tool_choice.is_none());
+    }
+    
+    #[test]
+    fn test_minimax_compat_preserves_tool_choice_named() {
+        use crate::models::chat::{ChatRequest, Message, ToolChoice};
+        
+        let mut chat = ChatRequest::default();
+        chat.messages = vec![
+            Message {
+                role: "user".to_string(),
+                content: Some("Hello".to_string()),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            },
+        ];
+        chat.tool_choice = Some(ToolChoice::String("my_function".to_string()));
+        
+        let opts = CompatOptions::minimax_compat();
+        apply_compat(&mut chat, &opts);
+        
+        // Named tool_choice should be preserved
+        assert!(chat.tool_choice.is_some());
+    }

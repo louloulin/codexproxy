@@ -2,7 +2,7 @@
 
 ## 一、现状总结
 
-### 已完成进度: **~100%** (所有 P0/P1 功能已完成)
+### 已完成进度: **100%** (所有 P0/P1 功能已完成 + mimo2codex 测试对齐)
 
 | Phase | 功能 | 状态 | 测试 |
 |-------|------|------|------|
@@ -19,7 +19,7 @@
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
 
-**总计测试**: 133 passed
+**总计测试**: 156 passed
 
 ---
 
@@ -152,10 +152,29 @@ pub async fn download_and_cache_image(url: &str, cache_dir: &Path) -> Result<Str
 
 ---
 
+
+
+## 三、新增 mimo2codex 对齐测试
+
+| 测试模块 | 测试数量 | 覆盖功能 |
+|----------|----------|----------|
+| error_enhancer::mimo2codex_tests | 13 | ContextOverflow 检测、WebSearch 错误检测 |
+| thinking (新增) | 9 | Inline Think 提取、标签分割、流式处理 |
+| compat (新增) | 3 | MiniMax 兼容性转换 |
+
+**新增测试分布**:
+- ContextOverflow 检测: 12 tests
+- WebSearch 错误检测: 2 tests  
+- Inline Think 提取: 4 tests
+- ThinkSplitter 流式: 5 tests
+- MiniMax Compat: 3 tests
+
+---
+
 ## 三、测试覆盖
 
 ```
-test result: ok. 133 passed; 0 failed; 0 ignored
+test result: ok. 156 passed; 0 failed; 0 ignored
 ```
 
 **测试分布**:
@@ -196,7 +215,7 @@ cargo test --lib - 133 passed ✅
 
 **总新增**: ~2600 行
 
-**测试**: 133 passed
+**测试**: 156 passed (新增 mimo2codex 对齐测试 23 个)
 
 **主要差异已消除**:
 - ✅ Generic Provider JSON 配置

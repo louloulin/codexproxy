@@ -101,6 +101,11 @@ impl EnhancedError {
             "context window exceeded",
             "input too long",
             "exceeds maximum length",
+            "exceeds the maximum",
+            "prompt is too long",
+            "input length",
+            "exceed context",
+            "上下文",
         ];
 
         let body_lower = body.to_lowercase();
@@ -254,5 +259,106 @@ mod tests {
         assert!(result.is_some());
         let error = result.unwrap();
         assert_eq!(error.code, "web_search_disabled");
+    }
+}
+
+#[cfg(test)]
+mod mimo2codex_tests {
+    use super::*;
+
+    // Tests from mimo2codex/test/upstream.contextOverflow.test.ts
+
+    #[test]
+    fn test_matches_openai_context_length_exceeded_code() {
+        let body = r#"{"error":{"code":"context_length_exceeded","message":"This model's maximum context length is 8192 tokens."}}"#;
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_some());
+        // Code should indicate context overflow (exact code may vary)
+        let err = result.as_ref().unwrap(); assert!(err.code.contains("context") || err.code.contains("overflow"));
+    }
+
+    #[test]
+    fn test_matches_classic_maximum_context_length() {
+        let body = "This model's maximum context length is 128000 tokens, but the request exceeded that.";
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_matches_prompt_too_long() {
+        let body = "prompt is too long: 12345 tokens > 8192 maximum";
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_matches_deepseek_input_length_exceed() {
+        let body = "input length and `max_tokens` exceed context limit";
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_matches_chinese_context_length() {
+        let body = "请求失败：上下文长度超出模型限制";
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_matches_tokens_exceeds_maximum() {
+        let body = "Requested 200000 tokens exceeds the maximum of 128000 supported by this model.";
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_does_not_match_websearch_disabled() {
+        // This should NOT match - web search disabled is handled separately
+        let body = r#"{"error":{"code":"plugin_disabled","message":"webSearchEnabled is false, please enable Web Search Plugin"}}"#;
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_does_not_match_model_not_found() {
+        let body = "invalid request: model not found";
+        let result = EnhancedError::detect_context_overflow(400, body);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_does_not_trigger_on_non_400() {
+        let body = "context length exceeded the cap";
+        let result = EnhancedError::detect_context_overflow(401, body);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_does_not_trigger_on_5xx() {
+        let body = "context_length_exceeded";
+        let result = EnhancedError::detect_context_overflow(500, body);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_returns_null_on_empty_body() {
+        let result = EnhancedError::detect_context_overflow(400, "");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_websearch_error_detection() {
+        let body = "web_search_enabled is false, please enable Web Search Plugin";
+        let result = EnhancedError::detect_web_search_disabled(body);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().code, "web_search_disabled");
+    }
+
+    #[test]
+    fn test_websearch_error_case_insensitive() {
+        let body = "WEB_SEARCH_ENABLED IS FALSE";
+        let result = EnhancedError::detect_web_search_disabled(body);
+        assert!(result.is_some());
     }
 }
