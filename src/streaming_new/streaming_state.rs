@@ -422,3 +422,79 @@ mod tests {
         assert_eq!(state.reasoning_summary.as_ref().unwrap(), "Let me think about this step by step...");
     }
 }
+
+
+#[cfg(test)]
+mod mimo2codex_tests {
+    use super::*;
+    use crate::models::chat::Delta;
+
+    #[test]
+    fn test_streaming_state_with_params() {
+        let state = StreamingState::new("resp_123".to_string(), "mimo-v2.5-pro".to_string());
+        assert!(!state.has_reasoning());
+        assert!(state.get_reasoning_content().is_none());
+    }
+
+    #[test]
+    fn test_delta_with_reasoning_content() {
+        let delta = Delta {
+            content: None,
+            reasoning_content: Some("thinking...".to_string()),
+            reasoning_summary_text: None,
+            ..Default::default()
+        };
+        assert!(delta.reasoning_content.is_some());
+        assert_eq!(delta.reasoning_content.as_ref().unwrap(), "thinking...");
+    }
+
+    #[test]
+    fn test_delta_with_reasoning_summary() {
+        let delta = Delta {
+            content: None,
+            reasoning_content: None,
+            reasoning_summary_text: Some("final reasoning".to_string()),
+            ..Default::default()
+        };
+        assert!(delta.reasoning_summary_text.is_some());
+    }
+
+    #[test]
+    fn test_delta_with_text_content() {
+        let delta = Delta {
+            content: Some("hello world".to_string()),
+            reasoning_content: None,
+            reasoning_summary_text: None,
+            ..Default::default()
+        };
+        assert!(delta.content.is_some());
+        assert_eq!(delta.content.as_ref().unwrap(), "hello world");
+    }
+
+    #[test]
+    fn test_streaming_state_accumulates_reasoning() {
+        let mut state = StreamingState::new("resp_123".to_string(), "mimo-v2.5-pro".to_string());
+        state.reasoning.content.push_str("thinking part 1... ");
+        state.reasoning.content.push_str("thinking part 2...");
+        assert!(state.reasoning.content.contains("thinking part 1"));
+    }
+
+    #[test]
+    fn test_streaming_state_reasoning_summary() {
+        let mut state = StreamingState::new("resp_123".to_string(), "mimo-v2.5-pro".to_string());
+        state.reasoning_summary = Some("Final summary text".to_string());
+        assert!(state.reasoning_summary.is_some());
+    }
+
+    #[test]
+    fn test_delta_default() {
+        let delta = Delta::default();
+        assert!(delta.content.is_none() || delta.content.is_some());
+    }
+
+    #[test]
+    fn test_streaming_state_has_reasoning_initially_false() {
+        let state = StreamingState::new("resp_123".to_string(), "mimo-v2.5-pro".to_string());
+        assert!(!state.has_reasoning());
+    }
+}

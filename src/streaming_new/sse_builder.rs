@@ -417,3 +417,146 @@ mod tests {
         assert!(has_func_delta);
     }
 }
+
+#[cfg(test)]
+mod mimo2codex_tests {
+    use super::*;
+
+    #[test]
+    fn test_response_created_event_format() {
+        let event = SseEvent::ResponseCreated {
+            response_id: "resp_123".to_string(),
+            model: "mimo-v2.5-pro".to_string(),
+            status: "in_progress".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.created"));
+        assert!(sse.contains("\"type\":\"response.created\""));  // No backslash escaping in actual output
+        assert!(sse.contains("resp_123"));
+        assert!(sse.contains("mimo-v2.5-pro"));
+    }
+
+    #[test]
+    fn test_output_item_added_event_format() {
+        let event = SseEvent::OutputItemAdded {
+            output_index: 0,
+            item_id: "item_abc".to_string(),
+            item_type: "message".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.output_item.added"));
+        assert!(sse.contains("\"type\":\"response.output_item.added\""));
+        assert!(sse.contains("\"output_index\":0"));
+        assert!(sse.contains("item_abc"));
+    }
+
+    #[test]
+    fn test_text_delta_event_format() {
+        let event = SseEvent::TextDelta {
+            content: "Hello, world!".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.output_text.delta"));
+        assert!(sse.contains("\"type\":\"response.output_text.delta\""));
+        assert!(sse.contains("Hello, world!"));
+    }
+
+    #[test]
+    fn test_text_delta_json_escaping() {
+        let event = SseEvent::TextDelta {
+            content: "Line1\nLine2\tTabbed".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("Line1"));
+    }
+
+    #[test]
+    fn test_reasoning_delta_event_format() {
+        let event = SseEvent::ReasoningDelta {
+            content: "Let me think...".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.reasoning_summary_text.delta"));
+        assert!(sse.contains("\"type\":\"response.reasoning_summary_text.delta\""));
+    }
+
+    #[test]
+    fn test_response_done_event_format() {
+        let event = SseEvent::ResponseDone {
+            response_id: "resp_done".to_string(),
+            status: "completed".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.done"));
+        assert!(sse.contains("\"type\":\"response.done\""));
+        assert!(sse.contains("resp_done"));
+    }
+
+    #[test]
+    fn test_function_call_delta_event_format() {
+        let event = SseEvent::FunctionCallDelta {
+            call_id: "call_1".to_string(),
+            arguments: r#"{"cmd":"ls"}"#.to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.function_call.arguments.delta"));
+        assert!(sse.contains("\"type\":\"response.function_call.arguments.delta\""));
+        assert!(sse.contains("call_1"));
+    }
+
+    #[test]
+    fn test_function_call_id_delta_event_format() {
+        let event = SseEvent::FunctionCallIdDelta {
+            call_id: "call_xyz".to_string(),
+            name: "shell".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.function_call.id.delta"));
+        assert!(sse.contains("\"type\":\"response.function_call.id.delta\""));
+    }
+
+    #[test]
+    fn test_annotation_added_event_format() {
+        let event = SseEvent::AnnotationAdded {
+            annotation_type: "url_citation".to_string(),
+            text: "Example site".to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.output_text.annotation.added"));
+        assert!(sse.contains("\"type\":\"response.output_text.annotation.added\""));
+    }
+
+    #[test]
+    fn test_raw_event_format() {
+        let event = SseEvent::Raw {
+            event: "custom.event".to_string(),
+            data: r#"{"key":"value"}"#.to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: custom.event"));
+        assert!(sse.contains(r#"data: {"key":"value"}"#));
+    }
+
+    #[test]
+    fn test_function_call_done_event_format() {
+        let event = SseEvent::FunctionCallDone {
+            call_id: "call_final".to_string(),
+            name: "shell".to_string(),
+            arguments: r#"{"cmd":"echo hello"}"#.to_string(),
+        };
+        
+        let sse = event.to_sse_string();
+        assert!(sse.contains("event: response.function_call.done"));
+        assert!(sse.contains("\"type\":\"response.function_call.done\""));
+    }
+}

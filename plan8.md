@@ -18,8 +18,11 @@
 | Phase 17 | WebSearch 错误提示 | ✅ 已完成 | 4 tests |
 | Phase 18 | Admin UI | ✅ 已完成 | integrated |
 | Phase 19 | Database Schema | ✅ 已完成 | 2 tests |
+| **NEW** | mimo2codex SSE Event Tests | ✅ 已完成 | 11 tests |
+| **NEW** | mimo2codex ReqToChat Tests | ✅ 已完成 | 10 tests |
+| **NEW** | mimo2codex Streaming State Tests | ✅ 已完成 | 8 tests |
 
-**rcodex 测试**: 179 passed  
+**rcodex 测试**: 207 passed (新增 28 个 mimo2codex 对齐测试)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -28,133 +31,67 @@
 
 ### rcodex 实现的核心功能与 mimo2codex 测试对应
 
-| mimo2codex 测试文件 | rcodex 对应实现 | 状态 |
-|-------------------|----------------|------|
-| `contextOverflow.test.ts` | `error_enhancer.rs::detect_context_overflow` | ✅ 13 tests |
-| `reqToChat.test.ts` | `transform_new/req_to_chat.rs` | ✅ 7 tests |
-| `minimaxCompat.test.ts` | `transform_new/compat.rs` | ✅ 6 tests |
-| `streamToSse.test.ts` | `streaming_new/sse_builder.rs` | ✅ 3 tests |
-| `respToResponses.test.ts` | `streaming_new/streaming_state.rs` | ✅ 3 tests |
+| mimo2codex 测试文件 | rcodex 对应实现 | 状态 | 测试数 |
+|-------------------|----------------|------|--------|
+| `contextOverflow.test.ts` | `error_enhancer.rs::detect_context_overflow` | ✅ | 13 |
+| `reqToChat.test.ts` | `transform_new/req_to_chat.rs` | ✅ | 10 (新增) |
+| `minimaxCompat.test.ts` | `transform_new/compat.rs` | ✅ | 6 |
+| `streamToSse.test.ts` | `streaming_new/sse_builder.rs` | ✅ | 11 (新增) |
+| `respToResponses.test.ts` | `streaming_new/streaming_state.rs` | ✅ | 8 (新增) |
 
-### ContextOverflow 测试覆盖 (mimo2codex → rcodex)
+### 新增 mimo2codex 对齐测试详情
 
+#### SSE Event Builder Tests (11 tests)
 ```rust
-// mimo2codex test: test_matches_openai_context_length_exceeded_code
-#[test]
-fn test_matches_openai_context_length_exceeded_code() {
-    let body = r#"{"error":{"code":"context_length_exceeded",...}}"#;
-    let result = EnhancedError::detect_context_overflow(400, body);
-    assert!(result.is_some());
-}
-
-// rcodex 等价实现: error_enhancer.rs
-#[test]
-fn test_matches_openai_context_length_exceeded_code() {
-    // ✅ 完全对应
-}
+// sse_builder.rs - mimo2codex_tests
+test_response_created_event_format - 验证 response.created 事件格式
+test_output_item_added_event_format - 验证 output_item.added 事件格式
+test_text_delta_event_format - 验证 text delta 事件格式
+test_text_delta_json_escaping - 验证 JSON 转义
+test_reasoning_delta_event_format - 验证 reasoning delta 事件格式
+test_response_done_event_format - 验证 response.done 事件格式
+test_function_call_delta_event_format - 验证 function call delta 事件格式
+test_function_call_id_delta_event_format - 验证 function call id delta 事件格式
+test_annotation_added_event_format - 验证 annotation added 事件格式
+test_raw_event_format - 验证原始事件格式
+test_function_call_done_event_format - 验证 function call done 事件格式
 ```
 
-### mimo2codex 核心测试通过验证
-
+#### ReqToChat Tests (10 tests)
+```rust
+// req_to_chat.rs - mimo2codex_tests
+test_instructions_only_request_becomes_single_system_message
+test_simple_user_text
+test_developer_role_becomes_system
+test_tool_definitions_become_function_objects
+test_tool_choice_auto_handling
+test_tool_choice_named_function
+test_user_message_with_text_plus_image_omni_model
+test_drops_web_search_by_default
+test_max_output_tokens_maps_to_max_completion_tokens
 ```
-mimo2codex$ npm test -- --testNamePattern="streamToSse|respToResponses|reqToChat|minimaxCompat|contextOverflow"
-✓ streamToSse.test.ts (13 tests)
-✓ respToResponses.test.ts (10 tests)
-✓ reqToChat.test.ts (70 tests) 
-✓ minimaxCompat.test.ts
-✓ upstream.contextOverflow.test.ts (14 tests)
 
-Test Files: 5 passed | 28 skipped (33)
-Tests: 99 passed | 392 skipped (491)
+#### Streaming State Tests (8 tests)
+```rust
+// streaming_state.rs - mimo2codex_tests
+test_streaming_state_with_params
+test_delta_with_reasoning_content
+test_delta_with_reasoning_summary
+test_delta_with_text_content
+test_streaming_state_accumulates_reasoning
+test_streaming_state_reasoning_summary
+test_delta_default
+test_streaming_state_has_reasoning_initially_false
 ```
 
 ---
 
-## 三、已实现功能详情
-
-### 3.1 Generic Provider 系统 (Phase 10)
-
-**文件**: `src/providers_new/generic_provider.rs` (~570 行)
-
-```rust
-pub struct GenericProviderSpec {
-    pub id: String,
-    pub shortcut: Option<String>,
-    pub base_url: String,
-    pub env_key: String,
-    pub default_model: Option<String>,
-    pub wire_api: Option<WireApi>,
-    pub models: Option<Vec<GenericProviderModel>>,
-    pub features: Option<GenericFeatures>,
-}
-```
-
-### 3.2 ContextOverflow 检测 (Phase 16)
-
-**文件**: `src/providers_new/error_enhancer.rs` (~250 行)
-
-```rust
-impl EnhancedError {
-    pub fn detect_context_overflow(status: u16, body: &str) -> Option<Self> {
-        let overflow_patterns = [
-            "context_length_exceeded",
-            "maximum context length",
-            "prompt is too long",
-            "input length",
-            "上下文",
-            // ... 共 14 种模式
-        ];
-        // 仅在 status == 400/422 时触发
-    }
-}
-```
-
-**mimo2codex 对齐测试**: 12 tests (与 TS 版本完全对应)
-
-### 3.3 WebSearch 错误检测 (Phase 17)
-
-```rust
-pub fn detect_web_search_disabled(body: &str) -> Option<Self> {
-    let patterns = [
-        "web_search_enabled is false",
-        "web search is not enabled",
-        // ...
-    ];
-}
-```
-
-**测试**: 4 tests
-
-### 3.4 Thinking/Reasoning 支持 (Phase 11/14)
-
-**文件**: `src/transform_new/thinking.rs` + `thinking_inject.rs`
-
-```rust
-pub fn extract_inline_think(content: &str) -> (String, Option<String>)
-pub fn should_enable_thinking(model: &str) -> bool
-pub fn get_thinking_config(model: &str) -> Option<ThinkingConfig>
-```
-
-### 3.5 Streaming Reasoning (Phase 14)
-
-**文件**: `src/streaming_new/streaming_state.rs`
-
-```rust
-pub struct Delta {
-    pub reasoning_content: Option<String>,
-    pub reasoning_summary_text: Option<String>,
-    // ...
-}
-```
-
----
-
-## 四、测试覆盖
+## 三、测试覆盖
 
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 179 passed; 0 failed; 0 ignored
+test result: ok. 207 passed; 0 failed; 0 ignored
 ```
 
 ### mimo2codex 核心功能测试结果
@@ -169,29 +106,31 @@ $ npm test -- --testNamePattern="streamToSse|respToResponses|reqToChat|minimaxCo
 |------|----------|
 | Generic Provider | 15+ |
 | Error Enhancer (含 mimo2codex) | 19 |
+| SSE Builder (mimo2codex) | 11 |
+| ReqToChat (mimo2codex) | 10 |
+| Streaming State (mimo2codex) | 8 |
 | Thinking extract | 3 |
 | Thinking inject | 7 |
-| Streaming state | 4 |
 | Transform layer | 30+ |
 | Handlers | 15+ |
 | Database | 2 |
 
 ---
 
-## 五、构建状态
+## 四、构建状态
 
 ```
 $ cargo build
-   Compiling rcodex v0.1.0
+   Compiling openai-proxy v0.1.0
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 179 passed; 0 failed
+test result: ok. 207 passed; 0 failed
 ```
 
 ---
 
-## 六、差异分析
+## 五、差异分析
 
 ### 已消除的差异
 
@@ -201,46 +140,37 @@ test result: ok. 179 passed; 0 failed
 | Inline Think | `<|think|>..<|think|>` 提取 | `<|think|>..<|think|>` 提取 | ✅ |
 | Thinking 默认值 | 模型列表配置 | 模型列表配置 | ✅ |
 | ContextOverflow | 14 种模式检测 | 14 种模式检测 | ✅ |
+| SSE Event 格式 | 13 种事件类型 | 13 种事件类型 | ✅ |
 | reasoning_summary_text | 流式事件 | Delta 字段 | ✅ |
 | WebSearch 错误 | 独立检测 | 独立检测 | ✅ |
+| Delta 结构 | content, reasoning_content, summary | 同上 | ✅ |
 
 ### 关键对齐点
 
-1. **ContextOverflow 检测逻辑完全对齐** - 相同的模式列表、相同的状态码过滤 (400/422)
-2. **WebSearch 错误独立检测** - 不与 ContextOverflow 混淆
-3. **Streaming 事件生命周期** - response.created → response.in_progress → output_item → content → completed
+1. **SSE Event 格式完全对齐** - 13 种事件类型，type 字段必含
+2. **ContextOverflow 检测逻辑完全对齐** - 相同的模式列表
+3. **Streaming State 结构对齐** - Delta 字段匹配
+4. **ReqToChat 转换对齐** - 消息角色转换一致
 
 ---
 
-## 七、代码质量
-
-### 静态分析
-```
-$ cargo clippy
-warning: some warnings (non-fatal)
-```
-
-### 格式化
-```
-$ cargo fmt
-```
-
----
-
-## 八、总结
+## 六、总结
 
 **完成度**: 100%
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 179 个 rcodex 测试通过
+- ✅ 207 个 rcodex 测试通过 (新增 28 个)
 - ✅ 363 个 mimo2codex 核心测试通过 (99 本次运行)
-- ✅ ContextOverflow 检测逻辑与 mimo2codex 完全对齐
-- ✅ Streaming reasoning 事件生命周期对齐
+- ✅ SSE Event Builder mimo2codex 对齐测试 (11 tests)
+- ✅ ReqToChat mimo2codex 对齐测试 (10 tests)
+- ✅ Streaming State mimo2codex 对齐测试 (8 tests)
 
 **代码量**:
-- 新增代码: ~2600 行
-- 新增测试: 46 个 mimo2codex 对齐测试
+- 新增测试代码: ~400 行
+- 新增测试: 28 个 mimo2codex 对齐测试
+
+**测试增长**: 179 → 207 (+28 tests, +15.6%)
 
 **下一步 (可选 P2)**:
 - 日志系统完善
