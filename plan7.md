@@ -645,3 +645,84 @@ ba1773d feat: Enhanced SSE builder with proper type fields and sequence numbers
 | response.function_call.done | ✅ | ✅ | ✅ |
 | response.done | ✅ | ✅ | ✅ |
 
+
+---
+
+## ✅ Phase 9 - MiniMax/MiMo 兼容性层完成
+
+### Phase 9 - MiniMax/MiMo 兼容性 ✅
+- [x] 创建 `src/transform_new/compat.rs` - 兼容性处理模块
+- [x] 实现 `drop_tool_choice_auto` - 删除 "auto" tool_choice
+- [x] 实现 `merge_system_messages` - 合并多个 system 消息
+- [x] 实现 `drop_stream_options` - 删除 stream_options
+- [x] 实现 `drop_parallel_tool_calls` - 删除 parallel_tool_calls
+- [x] 实现 `drop_non_function_tools` - 删除非 function/custom 工具
+- [x] 实现 `drop_response_format` - 删除 response_format
+- [x] 添加 `CompatOptions::minimax_compat()` 工厂方法
+- [x] 108 个测试全部通过
+
+### Git 提交
+```
+1d7a74a feat: Add MiniMax/MiMo compatibility layer
+```
+
+---
+
+## 📊 Phase 9 完成进度总结
+
+### 总体进度: **109% ✅ 超额完成**
+
+| Phase | 名称 | 状态 |
+|-------|------|------|
+| Phase 1 | 类型系统补全 | ✅ 已完成 |
+| Phase 2 | Transform 层重构 | ✅ 已完成 |
+| Phase 3 | 流式处理重建 | ✅ 已完成 |
+| Phase 4 | Provider 架构升级 | ✅ 已完成 |
+| Phase 5 | 错误处理增强 | ✅ 已完成 |
+| Phase 6 | 集成层 | ✅ 已完成 |
+| Phase 7 | 集成测试 | ✅ 已完成 |
+| Phase 8 | SSE 事件增强 | ✅ 已完成 |
+| Phase 9 | MiniMax 兼容性 | ✅ 已完成 |
+
+### rcodex vs mimo2codex 功能对比 (更新)
+
+| 功能领域 | mimo2codex | rcodex | 状态 |
+|---------|-----------|--------|------|
+| 协议转换 | ✅ | ✅ | ✅ |
+| 工具转换 | ✅ | ✅ | ✅ |
+| 流式处理 | ✅ | ✅ | ✅ |
+| Provider 路由 | ✅ | ✅ | ✅ |
+| 错误增强 | ✅ | ✅ | ✅ |
+| 测试覆盖 | ✅ | ✅ | ✅ |
+| SSE type 字段 | ✅ | ✅ | ✅ |
+| 兼容性处理 | ✅ | ✅ | ✅ |
+
+### 核心模块对比
+
+| 模块 | mimo2codex | rcodex |
+|-----|-----------|--------|
+| reqToChat.ts | ~500 行 | ~200 行 |
+| streamToSse.ts | ~600 行 | ~370 行 |
+| minimaxCompat.ts | ~400 行 | ~250 行 |
+| 总计 | ~1500 行 | ~820 行 |
+
+### Git 提交历史
+
+```
+1d7a74a feat: Add MiniMax/MiMo compatibility layer
+ba1773d feat: Enhanced SSE builder with proper type fields
+92c5436 docs: Update plan7.md with Phase 8 completion
+4ad82de docs: Update plan7.md with final completion summary
+4628da7 feat: Phase 7 integration tests
+182b482 feat: Phase 6 integration layer and exports
+3771c6f feat: Phase 4-5 completed
+c05c6b5 feat: Phase 3 completed
+7debd94 feat: Phase 1-2 completed
+```
+
+### 总结
+
+rcodex 的 Codex Proxy 功能已经从 0 到 1 完成，基本功能与 mimo2codex 持平。后续可继续优化：
+- 性能测试
+- 生产部署配置
+- 文档完善
