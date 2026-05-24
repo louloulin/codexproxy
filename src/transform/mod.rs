@@ -716,6 +716,8 @@ pub fn transform_responses_stream_to_chat_stream(
                                 })
                                 .collect()
                         }),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,
                     }),
                     finish_reason: msg.status.clone(),
                     logprobs: None,
@@ -975,7 +977,8 @@ mod tests {
                     role: Some("assistant".to_string()),
                     content: Some("Hello".to_string()),
                     tool_calls: None,
-                }),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,}),
                 finish_reason: Some("stop".to_string()),
                 logprobs: None,
             }],
@@ -1024,7 +1027,8 @@ mod tests {
                     role: Some("assistant".to_string()),
                     content: None,
                     tool_calls: None,
-                }),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,}),
                 finish_reason: None,
                 logprobs: None,
             }],

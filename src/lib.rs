@@ -28,3 +28,4 @@ pub use transform_new::{req_to_chat, chat_to_responses};
 pub use streaming_new::{SseEventBuilder, StreamingState};
 pub use providers_new::{ProviderRegistry, MimoProvider, ErrorEnhancer, EnhancedError};
 pub mod integration; // Integration examples and usage demonstrations
+pub mod db; // Database schema and repositories

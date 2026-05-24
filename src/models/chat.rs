@@ -461,6 +461,16 @@ pub struct Delta {
     /// Tool calls that the model wants to make
     #[serde(alias = "tool_calls", default)]
     pub tool_calls: Option<Vec<ToolCall>>,
+
+    /// Reasoning/thinking content (DeepSeek, o1 style)
+    /// Contains <think>...</think> content that should be extracted
+    #[serde(alias = "reasoning_content", alias = "thinking", default)]
+    pub reasoning_content: Option<String>,
+
+    /// Reasoning summary text (o1/o3 series models)
+    /// A condensed summary of the reasoning process
+    #[serde(rename = "reasoning_summary_text", alias = "summary", default)]
+    pub reasoning_summary_text: Option<String>,
 }
 
 #[cfg(test)]

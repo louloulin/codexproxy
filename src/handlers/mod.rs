@@ -16,6 +16,8 @@ use axum::{
 use futures::{stream, StreamExt};
 use std::sync::Arc;
 
+pub mod admin;
+
 use crate::config::Config;
 use crate::error::Error;
 use crate::models::chat::{ChatCompletionChunk, ChatRequest};
@@ -1048,7 +1050,8 @@ mod tests {
                         role: Some("assistant".to_string()),
                         content: Some("Hello".to_string()),
                         tool_calls: None,
-                    }),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,}),
                     finish_reason: None,
                     logprobs: None,
                 }],
@@ -1065,7 +1068,8 @@ mod tests {
                         role: None,
                         content: None,
                         tool_calls: None,
-                    }),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,}),
                     finish_reason: Some("stop".to_string()),
                     logprobs: None,
                 }],
@@ -1132,7 +1136,8 @@ mod tests {
                     role: Some("assistant".to_string()),
                     content: Some("Hello".to_string()),
                     tool_calls: None,
-                }),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,}),
                 finish_reason: Some("stop".to_string()),
                 logprobs: None,
             }],
@@ -1204,6 +1209,8 @@ mod tests {
                                 arguments: "{\"city\":\"Par".to_string(),
                             },
                         }]),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,
                     }),
                     finish_reason: None,
                     logprobs: None,
@@ -1228,6 +1235,8 @@ mod tests {
                                 arguments: "is\"}".to_string(),
                             },
                         }]),
+                        reasoning_content: None,
+                        reasoning_summary_text: None,
                     }),
                     finish_reason: Some("tool_calls".to_string()),
                     logprobs: None,
@@ -1302,7 +1311,7 @@ mod tests {
         config.providers.zhipu.api_key = "".to_string();
         config.routing.default = "openai".to_string();
 
-        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)), Arc::new(crate::handlers::admin::AdminState::new()));
         let request_body = json!({
             "model": "gpt-4o",
             "instructions": "system prompt",
@@ -1432,7 +1441,7 @@ mod tests {
         config.providers.zhipu.api_key = "".to_string();
         config.routing.default = "openai".to_string();
 
-        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)), Arc::new(crate::handlers::admin::AdminState::new()));
         let request_body = json!({
             "model": "gpt-4o",
             "input": [
@@ -1503,7 +1512,7 @@ mod tests {
         config.providers.openai = None;
         config.routing.default = "zhipu".to_string();
 
-        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)), Arc::new(crate::handlers::admin::AdminState::new()));
         let request_body = json!({
             "model": "glm-5",
             "input": [
@@ -1563,7 +1572,7 @@ mod tests {
         config.providers.openai = None;
         config.routing.default = "zhipu".to_string();
 
-        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)), Arc::new(crate::handlers::admin::AdminState::new()));
         let request_body = json!({
             "model": "glm-5",
             "input": [
@@ -1628,7 +1637,7 @@ mod tests {
         config.providers.openai = None;
         config.routing.default = "zhipu".to_string();
 
-        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)), Arc::new(crate::handlers::admin::AdminState::new()));
         let request_body = json!({
             "model": "glm-5",
             "input": [

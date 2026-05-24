@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::handlers::{self, AppState};
+use crate::handlers::admin::AdminState;
 use axum::{
     body::Body,
     extract::State,
@@ -23,7 +24,6 @@ pub struct RateLimitState {
 
 impl RateLimitState {
     pub fn new(requests_per_minute: u32, burst: u32) -> Self {
-        // Convert requests per minute to per second quota
         let per_second = requests_per_minute / 60;
         let quota = Quota::per_second(NonZeroU32::new(per_second.max(1)).unwrap())
             .allow_burst(NonZeroU32::new(burst.max(1)).unwrap());
@@ -39,14 +39,11 @@ pub async fn rate_limit_middleware(
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, &'static str)> {
-    // Skip rate limiting for health check endpoints
     let path = request.uri().path();
-    if path == "/" || path == "/health" {
+    if path == "/" || path == "/health" || path.starts_with("/admin") {
         return Ok(next.run(request).await);
     }
 
-    // Extract client IP from request
-    // Try X-Forwarded-For header first (for proxied requests)
     let client_ip = request
         .headers()
         .get("x-forwarded-for")
@@ -54,7 +51,6 @@ pub async fn rate_limit_middleware(
         .and_then(|v| v.split(',').next())
         .map(|s| s.trim().to_string())
         .or_else(|| {
-            // Try X-Real-IP header
             request
                 .headers()
                 .get("x-real-ip")
@@ -63,7 +59,6 @@ pub async fn rate_limit_middleware(
         })
         .unwrap_or_else(|| "unknown".to_string());
 
-    // Check rate limit
     match rate_limit_state.limiter.check_key(&client_ip) {
         Ok(_) => Ok(next.run(request).await),
         Err(_) => {
@@ -77,12 +72,19 @@ pub async fn rate_limit_middleware(
 }
 
 /// Create the application router with all routes configured
-pub fn create_router(state: Arc<AppState>) -> Router {
+pub fn create_router(state: Arc<AppState>, admin_state: Arc<AdminState>) -> Router {
     let config = &state.config;
     let rate_limit_state = Arc::new(RateLimitState::new(
         config.server.rate_limit.requests_per_minute,
         config.server.rate_limit.burst,
     ));
+
+    let admin_router = Router::new()
+        .route("/", get(crate::handlers::admin::admin_dashboard))
+        .route("/api/status", get(crate::handlers::admin::api_status))
+        .route("/api/providers", get(crate::handlers::admin::api_providers))
+        .route("/api/stats", get(crate::handlers::admin::api_stats))
+        .with_state((state.clone(), admin_state));
 
     Router::new()
         .route("/", get(handlers::health_check))
@@ -90,18 +92,16 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/chat/completions", post(handlers::chat_completions))
         .route("/v1/responses", post(handlers::responses))
         .route("/responses", post(handlers::responses))
-        // Zhipu direct endpoint - bypasses transform layer
         .route(
             "/v1/providers/zhipu/chat/completions",
             post(handlers::zhipu_chat_completions),
         )
-        // Set body limit based on configuration
+        .nest("/admin", admin_router)
         .layer(axum::extract::DefaultBodyLimit::max(
             config.server.body_limit,
         ))
         .layer(
             ServiceBuilder::new()
-                // Request tracing with richer logs
                 .layer(
                     TraceLayer::new_for_http()
                         .make_span_with(|request: &Request<Body>| {
@@ -110,86 +110,16 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                                 .get(axum::http::header::CONTENT_LENGTH)
                                 .and_then(|v| v.to_str().ok())
                                 .unwrap_or("unknown");
-                            let content_type = request
-                                .headers()
-                                .get(axum::http::header::CONTENT_TYPE)
-                                .and_then(|v| v.to_str().ok())
-                                .unwrap_or("unknown");
-                            let user_agent = request
-                                .headers()
-                                .get(axum::http::header::USER_AGENT)
-                                .and_then(|v| v.to_str().ok())
-                                .unwrap_or("unknown");
                             tracing::info_span!(
                                 "http_request",
                                 method = %request.method(),
                                 uri = %request.uri(),
-                                content_length,
-                                content_type,
-                                user_agent
+                                content_length
                             )
-                        })
-                        .on_request(|request: &Request<_>, _span: &tracing::Span| {
-                            let content_length = request
-                                .headers()
-                                .get(axum::http::header::CONTENT_LENGTH)
-                                .and_then(|v| v.to_str().ok())
-                                .unwrap_or("unknown");
-                            let content_type = request
-                                .headers()
-                                .get(axum::http::header::CONTENT_TYPE)
-                                .and_then(|v| v.to_str().ok())
-                                .unwrap_or("unknown");
-                            let user_agent = request
-                                .headers()
-                                .get(axum::http::header::USER_AGENT)
-                                .and_then(|v| v.to_str().ok())
-                                .unwrap_or("unknown");
-                            tracing::debug!(
-                                method = %request.method(),
-                                uri = %request.uri(),
-                                content_length,
-                                content_type,
-                                user_agent,
-                                "incoming request"
-                            );
-                        })
-                        .on_response(
-                            |response: &Response,
-                             latency: std::time::Duration,
-                             _span: &tracing::Span| {
-                                let status = response.status();
-                                let content_length = response
-                                    .headers()
-                                    .get(axum::http::header::CONTENT_LENGTH)
-                                    .and_then(|v| v.to_str().ok())
-                                    .unwrap_or("unknown");
-                                let content_type = response
-                                    .headers()
-                                    .get(axum::http::header::CONTENT_TYPE)
-                                    .and_then(|v| v.to_str().ok())
-                                    .unwrap_or("unknown");
-                                tracing::debug!(
-                                    status = %status,
-                                    latency_ms = latency.as_millis(),
-                                    content_length,
-                                    content_type,
-                                    "response sent"
-                                );
-                            },
-                        )
-                        .on_failure(|error, latency: std::time::Duration, _span: &tracing::Span| {
-                            tracing::error!(
-                                classification = %error,
-                                latency_ms = latency.as_millis(),
-                                "request failed during http trace"
-                            );
                         }),
                 )
-                // CORS layer
                 .layer(CorsLayer::permissive()),
         )
-        // Apply rate limiting middleware
         .layer(middleware::from_fn_with_state(
             rate_limit_state,
             rate_limit_middleware,
@@ -198,10 +128,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 }
 
 pub async fn create_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
-    // Create application state with providers
     let state = Arc::new(AppState::new(config.clone()));
+    let admin_state = Arc::new(AdminState::new());
 
-    let app = create_router(state);
+    let app = create_router(state, admin_state);
 
     let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
     tracing::info!(
@@ -210,6 +140,7 @@ pub async fn create_server(config: Config) -> Result<(), Box<dyn std::error::Err
         config.server.rate_limit.requests_per_minute,
         config.server.rate_limit.burst
     );
+    tracing::info!("Admin UI available at http://{}/admin", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
