@@ -133,6 +133,7 @@ pub trait ExtendedLLMProvider: Send + Sync {
         Self: Sized;
 
     /// Native Responses API
+    #[allow(unused_variables)]
     async fn responses(&self, request: ResponsesRequest) -> Result<ResponsesResponse, ProviderError> {
         Err(ProviderError::InvalidRequest(
             "Responses API is not supported by this provider".to_string(),
@@ -140,6 +141,7 @@ pub trait ExtendedLLMProvider: Send + Sync {
     }
 
     /// Native Responses API streaming
+    #[allow(unused_variables)]
     async fn responses_streaming(&self, request: ResponsesRequest) -> Result<crate::providers::StreamingResponses, ProviderError> {
         Err(ProviderError::InvalidRequest(
             "Streaming Responses API is not supported by this provider".to_string(),

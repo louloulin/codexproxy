@@ -22,3 +22,9 @@ pub mod providers_new; // New provider architecture
 pub use config::Config;
 pub use error::Error;
 pub use handlers::AppState;
+
+// Re-export new modules for easy access
+pub use transform_new::{req_to_chat, chat_to_responses};
+pub use streaming_new::{SseEventBuilder, StreamingState};
+pub use providers_new::{ProviderRegistry, MimoProvider, ErrorEnhancer, EnhancedError};
+pub mod integration; // Integration examples and usage demonstrations
