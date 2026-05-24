@@ -17,6 +17,7 @@ pub mod transform;
 pub mod transform_new; // New complete transform layer
 pub mod streaming_new; // New streaming SSE layer
 pub mod providers_new; // New provider architecture
+pub mod util; // Utility modules
 
 // Re-export commonly used types
 pub use config::Config;
