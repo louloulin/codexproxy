@@ -32,8 +32,9 @@
 | Phase 31 | **Me Endpoints** | ✅ 已完成 | 13 tests |
 | Phase 32 | **Codex 模块测试修复** | ✅ 已完成 | 18 tests |
 | Phase 33 | **Update Method 检测** | ✅ 已完成 | 6 tests |
+| Phase 34 | **Proxy Dispatcher** | ✅ 已完成 | 8 tests |
 
-**rcodex 测试**: 397 passed (单线程)  
+**rcodex 测试**: 405 passed (单线程)  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -89,8 +90,9 @@ test result: ok. 397 passed; 0 failed
 | Me Endpoints | 13 |
 | Codex 模块 | 18 |
 | Update Method | 6 |
+| Proxy Dispatcher | 8 |
 
-**总计**: 397 tests
+**总计**: 405 tests
 
 ---
 
@@ -150,6 +152,7 @@ test result: ok. 397 passed; 0 failed
 ✅ codex.files - codex/mod.rs (11 tests)
 ✅ codex.state - codex/state.rs (7 tests)
 ✅ updateMethod - setup/update_method.rs (6 tests)
+✅ upstream.proxyDispatcher - upstream/mod.rs (8 tests)
 ❌ byok.pipeline  - 无 (BYOK 流程)
 ❌ codex.history.api - 无 (历史 API)
 ❌ db.codexHistory - 无 (历史记录)
@@ -206,9 +209,9 @@ test result: ok. 397 passed; 0 failed
 - 新增测试: 218 个 mimo2codex 对齐测试
 - 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs, base_url.rs, presets.rs, auth/mod.rs, auth/me.rs, setup/mod.rs, codex/mod.rs, codex/state.rs, setup/update_method.rs
 
-**测试增长**: 179 → 397 (+218 tests, +121.8%)
+**测试增长**: 179 → 405 (+226 tests, +126.3%)
 
-**mimo2codex 对齐率**: 26/32 模块 (81.3%)
+**mimo2codex 对齐率**: 27/32 模块 (84.4%)
 
 ---
 

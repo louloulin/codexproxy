@@ -57,6 +57,7 @@ base64 = "0.21"
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }
+url = "1"
 
 # Encryption
 aes-gcm = "0.10"
