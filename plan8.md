@@ -24,8 +24,9 @@
 | Phase 23 | Database Override 测试 | ✅ 已完成 | 6 tests |
 | Phase 24 | Database Auth 测试 | ✅ 已完成 | 6 tests |
 | Phase 25 | **AES-256-GCM 加密** | ✅ 已完成 | 7 tests |
+| Phase 26 | **Version Check 工具** | ✅ 已完成 | 7 tests |
 
-**rcodex 测试**: 291 passed  
+**rcodex 测试**: 298 passed  
 **mimo2codex 测试**: 363 passed (核心功能测试通过)
 
 ---
@@ -52,6 +53,7 @@
 | `db.overrides` | schema.rs (override_tests) | 6 |
 | `db.auth` | schema.rs (auth_tests) | 6 |
 | `security.encryption` | encryption.rs | 7 |
+| `checkUpdate` | check_update.rs | 7 |
 
 ### 测试覆盖矩阵
 
@@ -67,10 +69,10 @@
 ✅ reqToChat      - req_to_chat.rs (10 tests)
 ✅ respToResponses - chat_to_responses.rs (8 tests)
 ✅ upstream.contextOverflow - error_enhancer.rs (13 tests)
-✅ security.encryption - encryption.rs (7 tests) [NEW - Phase 25]
+✅ security.encryption - encryption.rs (7 tests)
+✅ checkUpdate - check_update.rs (7 tests)
 ❌ auth.flow      - 无 (HTTP 流程测试)
 ❌ byok.pipeline  - 无 (BYOK 流程)
-❌ checkUpdate    - 无 (版本检查)
 ❌ codex.files    - 无 (文件系统操作)
 ❌ codex.history.api - 无 (历史 API)
 ❌ codex.state    - 无 (状态管理)
@@ -95,7 +97,7 @@
 ### rcodex 测试结果
 ```
 $ cargo test --lib
-test result: ok. 291 passed; 0 failed
+test result: ok. 298 passed; 0 failed
 ```
 
 ### 测试分布
@@ -122,8 +124,9 @@ test result: ok. 291 passed; 0 failed
 | Handlers | 15+ |
 | Database | 2 |
 | Encryption (AES-256-GCM) | 7 |
+| CheckUpdate (semver) | 7 |
 
-**总计**: 291 tests
+**总计**: 298 tests
 
 ---
 
@@ -135,7 +138,7 @@ $ cargo build
     Finished dev [unoptimized]
 
 $ cargo test --lib
-test result: ok. 291 passed; 0 failed
+test result: ok. 298 passed; 0 failed
 ```
 
 ---
@@ -144,7 +147,6 @@ test result: ok. 291 passed; 0 failed
 
 ### 高优先级 (P0)
 - [ ] config.baseUrl 测试 - 配置解析
-- [ ] checkUpdate 测试 - 版本检查
 - [ ] providers.presets 测试 - 预设管理
 
 ### 中优先级 (P1)
@@ -165,7 +167,7 @@ test result: ok. 291 passed; 0 failed
 
 **主要成果**:
 - ✅ 所有 P0/P1 功能已实现
-- ✅ 291 个 rcodex 测试通过
+- ✅ 298 个 rcodex 测试通过
 - ✅ 363 个 mimo2codex 核心测试通过
 - ✅ 核心转换层完全覆盖
 - ✅ Provider 路由完全覆盖 (11 tests)
@@ -174,12 +176,13 @@ test result: ok. 291 passed; 0 failed
 - ✅ Error 增强已覆盖
 - ✅ Image/CLI/Dotenv 工具模块已覆盖
 - ✅ AES-256-GCM 加密模块已覆盖 (7 tests)
+- ✅ Version Check 模块已覆盖 (7 tests)
 
 **代码量**:
-- 新增测试: 112 个 mimo2codex 对齐测试
-- 新增模块: cli_color.rs, dotenv.rs, encryption.rs
+- 新增测试: 119 个 mimo2codex 对齐测试
+- 新增模块: cli_color.rs, dotenv.rs, encryption.rs, check_update.rs
 
-**测试增长**: 179 → 291 (+112 tests, +62.6%)
+**测试增长**: 179 → 298 (+119 tests, +66.5%)
 
 ---
 
