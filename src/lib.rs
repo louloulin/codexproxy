@@ -9,6 +9,7 @@ pub mod error_response;
 pub mod handlers;
 pub mod logging;
 pub mod models;
+pub mod protocol;
 pub mod providers;
 pub mod server;
 pub mod sse;

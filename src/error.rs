@@ -16,4 +16,7 @@ pub enum Error {
 
     #[error("YAML 错误: {0}")]
     Yaml(#[from] serde_yaml::Error),
+
+    #[error("Bad Request: {0}")]
+    BadRequest(String),
 }

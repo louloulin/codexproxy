@@ -6,6 +6,8 @@ pub struct Config {
     pub providers: ProvidersConfig,
     pub routing: RoutingConfig,
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub codex_cli: CodexCliConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -122,6 +124,42 @@ fn default_log_file_path() -> String {
     "logs/server.log".to_string()
 }
 
+/// Codex CLI specific configuration
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CodexCliConfig {
+    /// Enable Codex CLI compatibility mode
+    #[serde(default = "default_codex_cli_enabled")]
+    pub enabled: bool,
+    /// Auto-send thread/turn events
+    #[serde(default = "default_codex_cli_auto_events")]
+    pub auto_send_events: bool,
+    /// Enable server_model event
+    #[serde(default)]
+    pub send_server_model: bool,
+    /// Enable rate_limits event
+    #[serde(default)]
+    pub send_rate_limits: bool,
+}
+
+fn default_codex_cli_enabled() -> bool {
+    true
+}
+
+fn default_codex_cli_auto_events() -> bool {
+    true
+}
+
+impl Default for CodexCliConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_send_events: true,
+            send_server_model: false,
+            send_rate_limits: false,
+        }
+    }
+}
+
 impl Config {
     pub fn load() -> Result<Self, crate::error::Error> {
         // Try to load from config.yaml first
@@ -185,6 +223,7 @@ impl Default for Config {
                 format: "json".to_string(),
                 file_path: default_log_file_path(),
             },
+            codex_cli: CodexCliConfig::default(),
         }
     }
 }

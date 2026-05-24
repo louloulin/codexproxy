@@ -45,6 +45,7 @@ fn create_test_config() -> Config {
             format: "json".to_string(),
             file_path: "logs/server.log".to_string(),
         },
+        codex_cli: openai_proxy::config::CodexCliConfig::default(),
     }
 }
 
@@ -153,12 +154,23 @@ logging:
         .spawn()
         .expect("binary should spawn");
 
-    thread::sleep(Duration::from_millis(600));
+    let startup_deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let log_contents = loop {
+        let log_contents = fs::read_to_string(&log_path).unwrap_or_default();
+        let saw_truncation = !log_contents.contains("stale log line that must be truncated");
+        let saw_startup = log_contents.contains("Starting OpenAI Proxy Server");
+        if saw_truncation && saw_startup {
+            break log_contents;
+        }
+        if std::time::Instant::now() >= startup_deadline {
+            break log_contents;
+        }
+        thread::sleep(Duration::from_millis(50));
+    };
 
     let _ = child.kill();
     let _ = child.wait();
 
-    let log_contents = fs::read_to_string(&log_path).unwrap();
     let _ = fs::remove_dir_all(&temp_dir);
 
     assert!(
@@ -280,6 +292,24 @@ async fn test_responses_alias_endpoint_exists() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_responses_get_route_is_not_exposed() {
+    let app = create_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/v1/responses")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
 
 #[tokio::test]
@@ -494,6 +524,7 @@ async fn test_missing_provider_error() {
             format: "json".to_string(),
             file_path: "logs/server.log".to_string(),
         },
+        codex_cli: openai_proxy::config::CodexCliConfig::default(),
     };
 
     let state = Arc::new(AppState::new(config));

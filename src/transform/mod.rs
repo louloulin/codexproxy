@@ -128,10 +128,16 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
         input,
         instructions,
         tools,
+        tool_choice: chat_req
+            .tool_choice
+            .as_ref()
+            .and_then(|choice| serde_json::to_value(choice).ok()),
+        parallel_tool_calls: Some(chat_req.parallel_tool_calls),
         temperature: chat_req.temperature,
         top_p: chat_req.top_p,
         max_tokens: chat_req.max_tokens,
         stream: chat_req.stream,
+        include: vec![],
         text: chat_req
             .response_format
             .as_ref()
@@ -150,12 +156,16 @@ pub fn transform_chat_to_responses_request(chat_req: &ChatRequest) -> ResponsesR
             }),
         structured_output: None,
         store: None,
+        previous_response_id: None,
         metadata: None,
         model_settings: None,
         reasoning: None,
         stop: chat_req.stop.clone(),
         seed: chat_req.seed,
         user: chat_req.user.clone(),
+        service_tier: None,
+        prompt_cache_key: None,
+        namespace: None,
     }
 }
 
@@ -180,11 +190,11 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
     for item in &responses_req.input {
         match item {
             Item::Message(msg) => {
-                // Extract content from all content blocks
+                // Preserve the full message payload instead of only the first content block.
                 let content = msg
                     .content
                     .iter()
-                    .find_map(|c| match c {
+                    .filter_map(|c| match c {
                         ContentBlock::InputText(text) => Some(text.text.clone()),
                         ContentBlock::InputImage(img) => {
                             Some(format!("[Image: {}]", img.image_url))
@@ -193,7 +203,8 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                         ContentBlock::Refusal(refusal) => Some(refusal.refusal.clone()),
                         _ => None,
                     })
-                    .unwrap_or_default();
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
                 messages.push(ChatMessage {
                     role: msg.role.clone(),
@@ -406,6 +417,11 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
         })
     });
 
+    let tool_choice = responses_req
+        .tool_choice
+        .as_ref()
+        .and_then(|choice| serde_json::from_value(choice.clone()).ok());
+
     ChatRequest {
         model: responses_req.model.clone(),
         messages,
@@ -425,8 +441,8 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
         logit_bias: None,
         user: responses_req.user.clone(),
         tools,
-        tool_choice: None,
-        parallel_tool_calls: true,
+        tool_choice,
+        parallel_tool_calls: responses_req.parallel_tool_calls.unwrap_or(true),
     }
 }
 
@@ -478,12 +494,28 @@ pub fn transform_chat_to_responses_response(chat_resp: &ChatResponse) -> Respons
         total_tokens: u64::from(u.total_tokens),
     });
 
+    // Extract text from output for backwards compatibility
+    let text = output.iter().find_map(|item| {
+        if let OutputItem::Message(msg) = item {
+            msg.content.iter().find_map(|c| {
+                if let ContentBlock::OutputText(text) = c {
+                    Some(text.text.clone())
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    });
+
     ResponsesResponse {
         id: chat_resp.id.clone(),
         object: "response".to_string(),
         created: chat_resp.created,
         model: chat_resp.model.clone(),
         output,
+        text,
         usage,
         finish_reason: chat_resp.finish_reason.clone(),
         extra: chat_resp.extra.clone(),
@@ -625,12 +657,28 @@ pub fn transform_chat_stream_to_responses_stream(
         total_tokens: u64::from(u.total_tokens),
     });
 
+    // Extract text from output for backwards compatibility
+    let text = output.iter().find_map(|item| {
+        if let OutputItem::Message(msg) = item {
+            msg.content.iter().find_map(|c| {
+                if let ContentBlock::OutputText(text) = c {
+                    Some(text.text.clone())
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    });
+
     ResponsesStreamChunk {
         id: chat_chunk.id.clone(),
         object: "response.chunk".to_string(),
         created: chat_chunk.created,
         model: chat_chunk.model.clone(),
         output,
+        text,
         usage,
     }
 }
@@ -752,19 +800,26 @@ mod tests {
             })],
             instructions: None,
             tools: vec![],
+            tool_choice: None,
+            parallel_tool_calls: None,
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(1000),
             stream: None,
+            include: vec![],
             text: None,
             structured_output: None,
             store: None,
+            previous_response_id: None,
             metadata: None,
             model_settings: None,
             reasoning: None,
             stop: None,
             seed: None,
             user: None,
+            service_tier: None,
+            prompt_cache_key: None,
+            namespace: None,
         };
 
         let chat_req = transform_responses_to_chat_request(&responses_req);
@@ -772,6 +827,60 @@ mod tests {
         assert_eq!(chat_req.model, "gpt-4");
         assert_eq!(chat_req.messages.len(), 1);
         assert_eq!(chat_req.messages[0].content.as_ref().unwrap(), "Hello");
+    }
+
+    #[test]
+    fn test_transform_responses_to_chat_request_merges_multiple_content_blocks() {
+        let responses_req = ResponsesRequest {
+            model: "gpt-4".to_string(),
+            input: vec![Item::Message(MessageItem {
+                id: None,
+                role: "user".to_string(),
+                content: vec![
+                    ContentBlock::InputText(InputText {
+                        text: "Hello".to_string(),
+                    }),
+                    ContentBlock::InputText(InputText {
+                        text: "world".to_string(),
+                    }),
+                    ContentBlock::Refusal(crate::models::response::RefusalContent {
+                        refusal: "ignored".to_string(),
+                    }),
+                ],
+                end_turn: None,
+                phase: None,
+            })],
+            instructions: None,
+            tools: vec![],
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stream: None,
+            include: vec![],
+            text: None,
+            structured_output: None,
+            store: None,
+            previous_response_id: None,
+            metadata: None,
+            model_settings: None,
+            reasoning: None,
+            stop: None,
+            seed: None,
+            user: None,
+            service_tier: None,
+            prompt_cache_key: None,
+            namespace: None,
+        };
+
+        let chat_req = transform_responses_to_chat_request(&responses_req);
+
+        assert_eq!(chat_req.messages.len(), 1);
+        assert_eq!(
+            chat_req.messages[0].content.as_deref(),
+            Some("Hello\nworld\nignored")
+        );
     }
 
     #[test]
@@ -834,6 +943,7 @@ mod tests {
                     tool_calls: None,
                 },
             )],
+            text: Some("Hello!".to_string()),
             usage: Some(ResponsesUsage {
                 input_tokens: 10,
                 input_tokens_details: None,

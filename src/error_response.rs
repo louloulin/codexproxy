@@ -14,6 +14,7 @@ impl IntoResponse for Error {
             Error::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
             Error::Json(e) => (StatusCode::BAD_REQUEST, &e.to_string()),
             Error::Yaml(e) => (StatusCode::BAD_REQUEST, &e.to_string()),
+            Error::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
         };
 
         let body = json!({

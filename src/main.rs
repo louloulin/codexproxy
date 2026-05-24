@@ -4,6 +4,7 @@ mod error_response;
 mod handlers;
 mod logging;
 mod models;
+mod protocol;
 mod providers;
 mod server;
 mod transform;

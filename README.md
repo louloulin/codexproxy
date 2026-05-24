@@ -1,8 +1,8 @@
 # OpenAI Proxy
 
-A Rust-based API proxy server that transforms between OpenAI Chat Completions API and Responses API formats, with support for Zhipu AI (GLM models).
+A Rust-based API proxy server that transforms between OpenAI Chat Completions API and Responses API formats, with support for Zhipu AI (GLM models) and Codex CLI compatibility.
 
-[English](#english) | [中文文档](#中文文档)
+[English](#english) | [中文文档](#中文文档) | [Codex CLI](#codex-cli-integration)
 
 ---
 
@@ -13,6 +13,7 @@ A Rust-based API proxy server that transforms between OpenAI Chat Completions AP
 - **Multi-Provider Support**: OpenAI and Zhipu AI providers
 - **Streaming Support**: Full SSE streaming support for both APIs
 - **Model Routing**: Automatic provider selection based on model names
+- **Codex CLI Compatible**: Full Responses API streaming support for Codex CLI
 - **CORS Enabled**: Cross-origin requests supported
 - **Structured Logging**: JSON-formatted logs with tracing
 
@@ -523,6 +524,30 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   }'
 ```
 
+### Zhipu AI GLM-4 Streaming (Chat Completions)
+
+```bash
+curl -s -N -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-4-flash",
+    "messages": [{"role": "user", "content": "Say hi"}],
+    "stream": true
+  }'
+```
+
+### Responses API Streaming (Codex CLI Format)
+
+```bash
+curl -s -N -X POST http://localhost:8080/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-4-flash",
+    "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+    "stream": true
+  }'
+```
+
 ### SDK Integration Examples (SDK 接入示例)
 
 #### Python (OpenAI SDK)
@@ -638,19 +663,34 @@ curl -X POST http://localhost:8080/v1/responses \
 - gpt-4o
 - gpt-4o-mini
 - gpt-4-turbo
+- gpt-4
 - gpt-3.5-turbo
 
-### Zhipu AI
+### Zhipu AI (智谱 AI) - Recommended for Codex CLI
+- **glm-4-flash** - Fast, cost-effective (recommended)
 - glm-4
-- glm-4-flash
 - glm-4-plus
+- glm-4v (vision)
+- glm-z1 (reasoning)
 
 ## Development
 
 ### Run Tests
 
 ```bash
+# All tests
 cargo test
+
+# Unit tests only
+cargo test --lib
+
+# Integration tests
+cargo test --test integration_tests
+
+# Specific module tests
+cargo test --lib transform
+cargo test --lib handlers
+cargo test --lib providers
 ```
 
 ### Code Format
@@ -663,6 +703,22 @@ cargo fmt
 
 ```bash
 cargo clippy
+```
+
+### Test with Real API
+
+```bash
+# 1. Create test config with your API key
+cp test-config.toml.example test-config.toml
+
+# 2. Set your API key
+export ZHIPU_API_KEY="your-key"
+
+# 3. Start server
+cargo run -- --config test-config.toml
+
+# 4. Run all API tests
+./scripts/test-api.sh
 ```
 
 ## Troubleshooting (常见问题)
@@ -1220,12 +1276,15 @@ print(response.choices[0].message.content)
 - gpt-4o
 - gpt-4o-mini
 - gpt-4-turbo
+- gpt-4
 - gpt-3.5-turbo
 
-### Zhipu AI (智谱 AI)
+### Zhipu AI (智谱 AI) - Codex CLI 推荐
+- **glm-4-flash** - 快速、性价比高（推荐）
 - glm-4
-- glm-4-flash
 - glm-4-plus
+- glm-4v (视觉)
+- glm-z1 (推理)
 
 ## 常见问题
 
@@ -1241,6 +1300,124 @@ print(response.choices[0].message.content)
 ### 请求超时
 - 增加 provider 配置中的 `timeout` 值
 - 检查网络延迟
+
+---
+
+<a name="codex-cli"></a>
+## Codex CLI Integration
+
+This proxy is designed to work with Codex CLI (Claude Code), providing a local API endpoint that accepts both Chat Completions and Responses API formats.
+
+### Why Use This Proxy with Codex CLI?
+
+Codex CLI uses the Responses API format for streaming responses. However, GLM models only support the Chat Completions API. This proxy:
+
+1. Accepts Codex CLI's Responses API requests
+2. Transforms them to Chat Completions format
+3. Calls GLM's Chat Completions API
+4. Transforms the streaming response back to Responses API SSE format
+
+### Quick Start with Codex CLI
+
+```bash
+# 1. Start the proxy server
+cargo run -- --config config.yaml
+
+# 2. Configure Codex CLI to use your proxy
+export OPENAI_BASE_URL="http://localhost:9080/v1"
+export OPENAI_API_KEY="dummy-key"  # Or use your Zhipu API key
+
+# 3. Use Codex CLI with GLM models
+codex "Hello, say hi in one sentence" --model glm-4-flash
+```
+
+### Configuration for Codex CLI
+
+Create a `test-config.yaml` for local testing:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 9080
+  body_limit: 10485760
+
+providers:
+  zhipu:
+    api_key: "${ZHIPU_API_KEY}"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    default_model: "glm-4-flash"
+    timeout: 120
+
+routing:
+  default: "zhipu"
+  model_mapping:
+    glm-4-flash: "zhipu"
+    glm-4: "zhipu"
+    glm-4-plus: "zhipu"
+
+logging:
+  level: "info"
+  format: "pretty"
+```
+
+### Responses API SSE Events
+
+The proxy generates Codex CLI-compatible SSE events:
+
+```json
+{"type":"response.created","response":{...}}
+{"type":"response.in_progress","response":{...}}
+{"type":"response.output_item.added","item":{...}}
+{"type":"response.output_text.delta","delta":"Hello","output_index":0,"content_index":0}
+...
+{"type":"response.completed","response":{...,"usage":{"input_tokens":6,"output_tokens":30}}}
+```
+
+### API Endpoints for Codex CLI
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /v1/responses` | Responses API (Codex CLI format) |
+| `POST /responses` | Alias for /v1/responses |
+| `GET /v1/models` | List available models |
+
+### Environment Variables
+
+```bash
+# Set your Zhipu API key
+export ZHIPU_API_KEY="your-zhipu-api-key"
+
+# Optional: Use proxy
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY=http://127.0.0.1:7890
+```
+
+### Testing the Integration
+
+```bash
+# Start server
+cargo run -- --config test-config.toml
+
+# Test in another terminal
+curl -s -N -X POST http://127.0.0.1:9080/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-4-flash",
+    "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+    "stream": true
+  }' | head -10
+```
+
+### Test Results
+
+| Test | Status |
+|------|--------|
+| Unit Tests | 58/58 passed |
+| Integration Tests | 46/46 passed |
+| Chat Completions Non-Streaming | ✅ |
+| Chat Completions Streaming | ✅ |
+| Responses API Non-Streaming | ✅ |
+| Responses API Streaming | ✅ |
 
 ## License
 

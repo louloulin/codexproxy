@@ -1,13 +1,61 @@
 use crate::config::LoggingConfig;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use std::sync::{Arc, Mutex};
+use tracing_subscriber::{fmt::MakeWriter, layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Clone)]
+struct ImmediateFlushFileWriter {
+    file: Arc<Mutex<File>>,
+}
+
+impl ImmediateFlushFileWriter {
+    fn new(file: File) -> Self {
+        Self {
+            file: Arc::new(Mutex::new(file)),
+        }
+    }
+}
+
+struct ImmediateFlushGuard {
+    file: Arc<Mutex<File>>,
+}
+
+impl<'a> MakeWriter<'a> for ImmediateFlushFileWriter {
+    type Writer = ImmediateFlushGuard;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        ImmediateFlushGuard {
+            file: Arc::clone(&self.file),
+        }
+    }
+}
+
+impl Write for ImmediateFlushGuard {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut file = self
+            .file
+            .lock()
+            .map_err(|_| std::io::Error::other("log file mutex poisoned"))?;
+        let written = file.write(buf)?;
+        file.flush()?;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let mut file = self
+            .file
+            .lock()
+            .map_err(|_| std::io::Error::other("log file mutex poisoned"))?;
+        file.flush()
+    }
+}
 
 pub fn init_logging(config: &LoggingConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| default_env_filter(&config.level));
+    let filter = default_env_filter(&config.level);
     let file = prepare_log_file(&config.file_path)?;
-    let file_writer = move || file.try_clone().expect("log file clone should succeed");
+    let file_writer = ImmediateFlushFileWriter::new(file);
 
     tracing_subscriber::registry()
         .with(filter)
@@ -24,9 +72,17 @@ pub fn init_logging(config: &LoggingConfig) -> Result<(), Box<dyn std::error::Er
 
 fn default_env_filter(level: &str) -> tracing_subscriber::EnvFilter {
     let directive = if level.contains('=') || level.contains(',') {
-        level.to_string()
+        let env_level = std::env::var("RUST_LOG").ok().filter(|value| !value.is_empty());
+        match env_level {
+            Some(env_level) => format!("{env_level},{level}"),
+            None => level.to_string(),
+        }
     } else {
-        format!("openai_proxy={level},tower_http={level}")
+        let env_level = std::env::var("RUST_LOG").ok().filter(|value| !value.is_empty());
+        match env_level {
+            Some(env_level) => format!("{env_level},openai_proxy={level},tower_http={level}"),
+            None => format!("{level},openai_proxy={level},tower_http={level}"),
+        }
     };
 
     tracing_subscriber::EnvFilter::new(directive)
@@ -77,6 +133,7 @@ mod tests {
         let filter = super::default_env_filter(&config.level);
         let filter_string = filter.to_string();
 
+        assert!(filter_string.contains("info"));
         assert!(filter_string.contains("openai_proxy=info"));
         assert!(filter_string.contains("tower_http=info"));
     }

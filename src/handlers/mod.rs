@@ -13,16 +13,14 @@ use axum::{
     },
     Json,
 };
-use futures::stream;
-use serde_json::json;
-use std::collections::HashMap;
+use futures::{stream, StreamExt};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::Config;
 use crate::error::Error;
 use crate::models::chat::{ChatCompletionChunk, ChatRequest};
-use crate::models::response::{ContentBlock, MessageOutput, OutputText, ResponsesRequest, ResponsesStreamChunk};
+use crate::models::response::{ResponsesRequest, ResponsesStreamChunk};
+use crate::protocol::capabilities::ResponsesExecutionPlan;
 use crate::providers::{format_request_body_for_log, LLMProvider, OpenAIProvider, ZhipuProvider};
 use crate::transform;
 
@@ -47,333 +45,25 @@ fn should_emit_responses_stream_chunk(chunk: &ResponsesStreamChunk) -> bool {
     !chunk.output.is_empty() || chunk.usage.is_some()
 }
 
-fn responses_usage_from_chat_usage(usage: &crate::models::chat::Usage) -> crate::models::response::Usage {
-    crate::models::response::Usage {
-        input_tokens: u64::from(usage.prompt_tokens),
-        input_tokens_details: None,
-        output_tokens: u64::from(usage.completion_tokens),
-        output_tokens_details: None,
-        total_tokens: u64::from(usage.total_tokens),
-    }
+fn build_responses_execution_plan(
+    provider: &dyn LLMProvider,
+    request: &ResponsesRequest,
+) -> ResponsesExecutionPlan {
+    ResponsesExecutionPlan::from_request(&provider.capabilities(), request)
 }
 
-fn message_output_for_stream(
-    id: String,
-    index: u32,
-    role: String,
-    text: String,
-    status: Option<String>,
-) -> crate::models::response::OutputItem {
-    crate::models::response::OutputItem::Message(MessageOutput {
-        index,
-        id: Some(id),
-        role,
-        content: vec![ContentBlock::OutputText(OutputText {
-            text,
-            annotations: None,
-        })],
-        status,
-        end_turn: None,
-        phase: None,
-        tool_calls: None,
-    })
-}
-
-fn response_snapshot_json(
-    id: &str,
-    created_at: u64,
-    model: &str,
-    status: &str,
-    output: Vec<crate::models::response::OutputItem>,
-    usage: Option<crate::models::response::Usage>,
-) -> serde_json::Value {
-    json!({
-        "id": id,
-        "object": "response",
-        "created_at": created_at,
-        "status": status,
-        "error": null,
-        "incomplete_details": null,
-        "instructions": null,
-        "max_output_tokens": null,
-        "model": model,
-        "output": output,
-        "parallel_tool_calls": true,
-        "previous_response_id": null,
-        "reasoning": {
-            "effort": null,
-            "summary": null
-        },
-        "store": false,
-        "temperature": null,
-        "text": {
-            "format": {
-                "type": "text"
-            }
-        },
-        "tool_choice": "auto",
-        "tools": [],
-        "top_p": null,
-        "truncation": "disabled",
-        "usage": usage,
-        "user": null,
-        "metadata": {}
-    })
-}
-
-fn current_unix_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0)
+fn unsupported_responses_features_message(
+    provider_name: &str,
+    unsupported_features: &[String],
+) -> String {
+    format!(
+        "Provider {provider_name} cannot preserve Responses features in chat fallback mode: {}",
+        unsupported_features.join(", ")
+    )
 }
 
 fn responses_protocol_payloads_from_chat_chunks(chunks: &[ChatCompletionChunk]) -> Vec<String> {
-    tracing::info!(
-        chunk_count = chunks.len(),
-        "responses_protocol_payloads_from_chat_chunks called"
-    );
-
-    if chunks.is_empty() {
-        tracing::warn!("Empty chunks, sending minimal response.completed");
-        let completed_event = json!({
-            "type": "response.completed",
-            "response": response_snapshot_json(
-                "resp_empty",
-                current_unix_timestamp(),
-                "unknown",
-                "completed",
-                vec![],
-                None
-            )
-        });
-        let completed_str = serde_json::to_string(&completed_event)
-            .expect("Failed to serialize response.completed");
-
-        return vec![completed_str, "[DONE]".to_string()];
-    }
-
-    let first = &chunks[0];
-    tracing::info!(
-        first_chunk_id = %first.id,
-        first_chunk_model = %first.model,
-        first_chunk_choices = first.choices.len(),
-        "processing chunks starting from first"
-    );
-    let mut payloads = vec![
-        serde_json::to_string(&json!({
-            "type": "response.created",
-            "response": response_snapshot_json(
-                &first.id,
-                first.created,
-                &first.model,
-                "in_progress",
-                vec![],
-                None
-            )
-        }))
-        .expect("Failed to serialize response.created event"),
-        serde_json::to_string(&json!({
-            "type": "response.in_progress",
-            "response": response_snapshot_json(
-                &first.id,
-                first.created,
-                &first.model,
-                "in_progress",
-                vec![],
-                None
-            )
-        }))
-        .expect("Failed to serialize response.in_progress event"),
-    ];
-
-    let mut text_by_index: HashMap<u32, String> = HashMap::new();
-    let mut role_by_index: HashMap<u32, String> = HashMap::new();
-    let mut item_id_by_index: HashMap<u32, String> = HashMap::new();
-    let mut added_indices: HashMap<u32, bool> = HashMap::new();
-    let mut done_indices: HashMap<u32, bool> = HashMap::new();
-    let mut final_usage: Option<crate::models::response::Usage> = None;
-    let mut final_output: Vec<crate::models::response::OutputItem> = Vec::new();
-
-    for chunk in chunks {
-        if let Some(usage) = &chunk.usage {
-            final_usage = Some(responses_usage_from_chat_usage(usage));
-        }
-
-        for choice in &chunk.choices {
-            let Some(delta) = &choice.delta else {
-                continue;
-            };
-
-            let role = delta
-                .role
-                .clone()
-                .or_else(|| role_by_index.get(&choice.index).cloned())
-                .unwrap_or_else(|| "assistant".to_string());
-            role_by_index.insert(choice.index, role.clone());
-            let item_id = item_id_by_index
-                .entry(choice.index)
-                .or_insert_with(|| format!("msg_{}_{}", first.id, choice.index))
-                .clone();
-
-            if let Some(content) = &delta.content {
-                if !added_indices.get(&choice.index).copied().unwrap_or(false) {
-                    payloads.push(
-                        serde_json::to_string(&json!({
-                            "type": "response.output_item.added",
-                            "output_index": choice.index,
-                            "item": message_output_for_stream(
-                                item_id.clone(),
-                                choice.index,
-                                role.clone(),
-                                String::new(),
-                                Some("in_progress".to_string()),
-                            )
-                        }))
-                        .expect("Failed to serialize response.output_item.added event"),
-                    );
-                    payloads.push(
-                        serde_json::to_string(&json!({
-                            "type": "response.content_part.added",
-                            "item_id": item_id,
-                            "output_index": choice.index,
-                            "content_index": 0,
-                            "part": {
-                                "type": "output_text",
-                                "text": "",
-                                "annotations": []
-                            }
-                        }))
-                        .expect("Failed to serialize response.content_part.added event"),
-                    );
-                    added_indices.insert(choice.index, true);
-                }
-
-                text_by_index
-                    .entry(choice.index)
-                    .and_modify(|text| text.push_str(content))
-                    .or_insert_with(|| content.clone());
-
-                payloads.push(
-                    serde_json::to_string(&json!({
-                        "type": "response.output_text.delta",
-                        "item_id": item_id_by_index.get(&choice.index).cloned().unwrap_or_default(),
-                        "output_index": choice.index,
-                        "content_index": 0,
-                        "delta": content.clone(),
-                    }))
-                    .expect("Failed to serialize response.output_text.delta event"),
-                );
-            }
-
-            if choice.finish_reason.is_some() && !done_indices.get(&choice.index).copied().unwrap_or(false) {
-                let full_text = text_by_index.get(&choice.index).cloned().unwrap_or_default();
-                if !added_indices.get(&choice.index).copied().unwrap_or(false) {
-                    payloads.push(
-                        serde_json::to_string(&json!({
-                            "type": "response.output_item.added",
-                            "output_index": choice.index,
-                            "item": message_output_for_stream(
-                                item_id.clone(),
-                                choice.index,
-                                role.clone(),
-                                String::new(),
-                                Some("in_progress".to_string()),
-                            )
-                        }))
-                        .expect("Failed to serialize response.output_item.added event"),
-                    );
-                    payloads.push(
-                        serde_json::to_string(&json!({
-                            "type": "response.content_part.added",
-                            "item_id": item_id,
-                            "output_index": choice.index,
-                            "content_index": 0,
-                            "part": {
-                                "type": "output_text",
-                                "text": "",
-                                "annotations": []
-                            }
-                        }))
-                        .expect("Failed to serialize response.content_part.added event"),
-                    );
-                    added_indices.insert(choice.index, true);
-                }
-                let final_item = message_output_for_stream(
-                    item_id_by_index.get(&choice.index).cloned().unwrap_or_default(),
-                    choice.index,
-                    role.clone(),
-                    full_text.clone(),
-                    Some("completed".to_string()),
-                );
-                payloads.push(
-                    serde_json::to_string(&json!({
-                        "type": "response.output_text.done",
-                        "item_id": item_id_by_index.get(&choice.index).cloned().unwrap_or_default(),
-                        "output_index": choice.index,
-                        "content_index": 0,
-                        "text": full_text.clone(),
-                    }))
-                    .expect("Failed to serialize response.output_text.done event"),
-                );
-                payloads.push(
-                    serde_json::to_string(&json!({
-                        "type": "response.content_part.done",
-                        "item_id": item_id_by_index.get(&choice.index).cloned().unwrap_or_default(),
-                        "output_index": choice.index,
-                        "content_index": 0,
-                        "part": {
-                            "type": "output_text",
-                            "text": full_text.clone(),
-                            "annotations": []
-                        }
-                    }))
-                    .expect("Failed to serialize response.content_part.done event"),
-                );
-                payloads.push(
-                    serde_json::to_string(&json!({
-                        "type": "response.output_item.done",
-                        "output_index": choice.index,
-                        "item": final_item.clone(),
-                    }))
-                    .expect("Failed to serialize response.output_item.done event"),
-                );
-                final_output.push(final_item);
-                done_indices.insert(choice.index, true);
-            }
-        }
-    }
-
-    tracing::info!(
-        payload_count = payloads.len(),
-        final_usage = ?final_usage,
-        "generated payloads, adding response.completed"
-    );
-
-    let completed_event = json!({
-        "type": "response.completed",
-        "response": response_snapshot_json(
-            &first.id,
-            first.created,
-            &first.model,
-            "completed",
-            final_output,
-            final_usage
-        )
-    });
-
-    let completed_str = serde_json::to_string(&completed_event)
-        .expect("Failed to serialize response.completed event");
-
-    payloads.push(completed_str);
-    payloads.push("[DONE]".to_string());
-
-    tracing::info!(
-        total_payloads = payloads.len(),
-        "responses_protocol_payloads_from_chat_chunks complete"
-    );
-
-    payloads
+    crate::protocol::events::responses_protocol_payloads_from_chat_chunks(chunks)
 }
 
 fn responses_stream_events_from_chat_chunks(chunks: &[ChatCompletionChunk]) -> Vec<Event> {
@@ -395,7 +85,20 @@ fn responses_stream_events_from_chat_chunks(chunks: &[ChatCompletionChunk]) -> V
                 true
             }
         })
-        .map(|payload| Event::default().data(payload))
+        .filter_map(|payload| {
+            if payload == "[DONE]" {
+                return Some(Event::default().data("[DONE]"));
+            }
+            // Extract event type from payload JSON for SSE event name
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&payload) {
+                let event_type = json.get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("message");
+                Some(Event::default().event(event_type).data(payload))
+            } else {
+                Some(Event::default().data(payload))
+            }
+        })
         .collect();
 
     tracing::info!(
@@ -410,15 +113,6 @@ fn responses_stream_events_from_chat_chunks(chunks: &[ChatCompletionChunk]) -> V
     }
 
     events
-}
-
-fn responses_stream_event_from_chat_chunk(chunk: &ChatCompletionChunk) -> Option<Event> {
-    let responses_chunk = transform::transform_chat_stream_to_responses_stream(chunk);
-    if !should_emit_responses_stream_chunk(&responses_chunk) {
-        return None;
-    }
-
-    Some(Event::default().data(serde_json::to_string(&responses_chunk).unwrap_or_default()))
 }
 
 fn chat_stream_event_from_chat_chunk(chunk: &ChatCompletionChunk) -> Option<Event> {
@@ -535,19 +229,31 @@ pub async fn chat_completions(
                 if !streaming.is_success() {
                     return Error::Provider(format!(
                         "Streaming request failed with status: {}",
-                        streaming.status
+                        streaming.status()
                     ))
                     .into_response();
                 }
 
                 // Transform streaming chunks to Responses format to demonstrate conversion
-                let stream = stream::iter(
-                    streaming
-                        .chunks
-                        .into_iter()
-                        .filter_map(|chunk| chat_stream_event_from_chat_chunk(&chunk))
-                        .map(Ok::<_, std::convert::Infallible>),
-                );
+                let stream = match streaming {
+                    crate::providers::StreamingChat::Collected { chunks, .. } => {
+                        stream::iter(
+                            chunks
+                                .into_iter()
+                                .filter_map(|chunk| chat_stream_event_from_chat_chunk(&chunk))
+                                .map(Ok::<_, std::convert::Infallible>),
+                        )
+                        .boxed()
+                    }
+                    crate::providers::StreamingChat::Streamed { stream, .. } => {
+                        stream
+                            .filter_map(|chunk| async move {
+                                chat_stream_event_from_chat_chunk(&chunk)
+                            })
+                            .map(|event| Ok::<_, std::convert::Infallible>(event))
+                            .boxed()
+                    }
+                };
 
                 Sse::new(stream).into_response()
             }
@@ -637,6 +343,92 @@ pub async fn responses(
     );
 
     let stream = body.stream.unwrap_or(false);
+    let requested_model_for_response = body.model.clone();
+
+    let execution_plan = build_responses_execution_plan(provider.as_ref(), &body);
+    tracing::info!(
+        route = "/v1/responses",
+        provider = provider.name(),
+        model = %requested_model_for_response,
+        stream,
+        execution_plan = ?execution_plan,
+        "planned responses execution"
+    );
+
+    match &execution_plan {
+        ResponsesExecutionPlan::NativeResponses => {
+            tracing::info!(
+                route = "/v1/responses",
+                provider = provider.name(),
+                model = %requested_model_for_response,
+                stream,
+                include_count = body.include.len(),
+                has_previous_response_id = body.previous_response_id.is_some(),
+                "using native responses provider path"
+            );
+
+            if stream {
+                match provider.responses_streaming(body).await {
+                    Ok(streaming) => {
+                        if !streaming.is_success() {
+                            return Error::Provider(format!(
+                                "Streaming responses request failed with status: {}",
+                                streaming.status
+                            ))
+                            .into_response();
+                        }
+
+                        let stream = streaming.events.map(|payload| {
+                            Ok::<_, std::convert::Infallible>(Event::default().data(payload))
+                        });
+
+                        return Sse::new(stream)
+                            .keep_alive(KeepAlive::new())
+                            .into_response();
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            route = "/v1/responses",
+                            provider = provider.name(),
+                            model = %requested_model_for_response,
+                            error = %e,
+                            "provider native responses streaming request failed"
+                        );
+                        return Error::Provider(e.to_string()).into_response();
+                    }
+                }
+            }
+
+            match provider.responses(body).await {
+                Ok(responses_response) => return Json(responses_response).into_response(),
+                Err(e) => {
+                    tracing::error!(
+                        route = "/v1/responses",
+                        provider = provider.name(),
+                        model = %requested_model_for_response,
+                        error = %e,
+                        "provider native responses request failed"
+                    );
+                    return Error::Provider(e.to_string()).into_response();
+                }
+            }
+        }
+        ResponsesExecutionPlan::Reject {
+            unsupported_features,
+        } => {
+            let message =
+                unsupported_responses_features_message(provider.name(), unsupported_features);
+            tracing::warn!(
+                route = "/v1/responses",
+                provider = provider.name(),
+                model = %requested_model_for_response,
+                unsupported_features = ?unsupported_features,
+                "rejecting responses request before lossy chat fallback"
+            );
+            return Error::Provider(message).into_response();
+        }
+        ResponsesExecutionPlan::ChatFallback => {}
+    }
 
     if stream {
         // Handle streaming - convert to chat format, call provider, convert back
@@ -663,92 +455,104 @@ pub async fn responses(
             Ok(streaming) => {
                 tracing::info!(
                     route = "/v1/responses",
-                    provider = provider.name(),
-                    chunk_count = streaming.chunks.len(),
-                    status = streaming.status,
+                    status = streaming.status(),
+                    is_streamed = streaming.is_streamed(),
+                    is_collected = streaming.is_collected(),
                     "provider streaming response received"
                 );
 
                 if !streaming.is_success() {
                     return Error::Provider(format!(
                         "Streaming request failed with status: {}",
-                        streaming.status
+                        streaming.status()
                     ))
                     .into_response();
                 }
 
-                // Log chunk details
-                for (i, chunk) in streaming.chunks.iter().enumerate() {
-                    tracing::debug!(
-                        route = "/v1/responses",
-                        chunk_index = i,
-                        chunk_id = %chunk.id,
-                        choices_count = chunk.choices.len(),
-                        has_usage = chunk.usage.is_some(),
-                        "streaming chunk detail"
-                    );
+                // Handle based on streaming type
+                match streaming {
+                    crate::providers::StreamingChat::Collected { chunks, .. } => {
+                        // Log chunk details
+                        for (i, chunk) in chunks.iter().enumerate() {
+                            tracing::debug!(
+                                route = "/v1/responses",
+                                chunk_index = i,
+                                chunk_id = %chunk.id,
+                                choices_count = chunk.choices.len(),
+                                has_usage = chunk.usage.is_some(),
+                                "streaming chunk detail"
+                            );
+                        }
+
+                        let events = responses_stream_events_from_chat_chunks(&chunks);
+                        tracing::info!(
+                            route = "/v1/responses",
+                            event_count = events.len(),
+                            chunk_count = chunks.len(),
+                            "generated SSE events from chunks"
+                        );
+
+                        // 保险检查：确保至少有 [DONE]
+                        if events.is_empty() {
+                            tracing::error!(
+                                route = "/v1/responses",
+                                chunk_count = chunks.len(),
+                                "CRITICAL: No events generated from chunks, using fallback"
+                            );
+                            let fallback_events = responses_stream_events_from_chat_chunks(&[]);
+
+                            let stream = stream::iter(
+                                fallback_events.into_iter().map(Ok::<_, std::convert::Infallible>),
+                            );
+
+                            // 使用 KeepAlive 防止连接提前关闭
+                            return Sse::new(stream)
+                                .keep_alive(KeepAlive::new())
+                                .into_response();
+                        }
+
+                        // 记录每个事件的内容（前100字符）
+                        for (i, event) in events.iter().enumerate() {
+                            tracing::debug!(
+                                route = "/v1/responses",
+                                event_index = i,
+                                event_preview = ?event,
+                                "SSE event detail"
+                            );
+                        }
+
+                        let stream = stream::iter(
+                            events
+                                .into_iter()
+                                .map(Ok::<_, std::convert::Infallible>),
+                        );
+
+                        // 添加 KeepAlive 以防止连接提前关闭
+                        Sse::new(stream)
+                            .keep_alive(KeepAlive::new())
+                            .into_response()
+                    }
+                    crate::providers::StreamingChat::Streamed { stream, .. } => {
+                        let chunks: Vec<_> = stream.collect().await;
+                        let events = responses_stream_events_from_chat_chunks(&chunks);
+                        tracing::info!(
+                            route = "/v1/responses",
+                            event_count = events.len(),
+                            chunk_count = chunks.len(),
+                            "generated SSE events from streamed chunks"
+                        );
+
+                        let stream = stream::iter(
+                            events
+                                .into_iter()
+                                .map(Ok::<_, std::convert::Infallible>),
+                        );
+
+                        Sse::new(stream)
+                            .keep_alive(KeepAlive::new())
+                            .into_response()
+                    }
                 }
-
-                let events = responses_stream_events_from_chat_chunks(&streaming.chunks);
-                tracing::info!(
-                    route = "/v1/responses",
-                    event_count = events.len(),
-                    chunk_count = streaming.chunks.len(),
-                    "generated SSE events from chunks"
-                );
-
-                // 保险检查：确保至少有 [DONE]
-                if events.is_empty() {
-                    tracing::error!(
-                        route = "/v1/responses",
-                        chunk_count = streaming.chunks.len(),
-                        "CRITICAL: No events generated from chunks, using fallback"
-                    );
-                    let fallback_events = vec![
-                        Event::default().data(json!({
-                            "type": "response.completed",
-                            "response": response_snapshot_json(
-                                "resp_fallback",
-                                current_unix_timestamp(),
-                                "unknown",
-                                "completed",
-                                vec![],
-                                None
-                            )
-                        }).to_string()),
-                        Event::default().data("[DONE]"),
-                    ];
-
-                    let stream = stream::iter(
-                        fallback_events.into_iter().map(Ok::<_, std::convert::Infallible>),
-                    );
-
-                    // 使用 KeepAlive 防止连接提前关闭
-                    return Sse::new(stream)
-                        .keep_alive(KeepAlive::new())
-                        .into_response();
-                }
-
-                // 记录每个事件的内容（前100字符）
-                for (i, event) in events.iter().enumerate() {
-                    tracing::debug!(
-                        route = "/v1/responses",
-                        event_index = i,
-                        event_preview = ?event,
-                        "SSE event detail"
-                    );
-                }
-
-                let stream = stream::iter(
-                    events
-                        .into_iter()
-                        .map(Ok::<_, std::convert::Infallible>),
-                );
-
-                // 添加 KeepAlive 以防止连接提前关闭
-                Sse::new(stream)
-                    .keep_alive(KeepAlive::new())
-                    .into_response()
             }
             Err(e) => {
                 tracing::error!(
@@ -865,17 +669,31 @@ pub async fn zhipu_chat_completions(
                 if !streaming.is_success() {
                     return Error::Provider(format!(
                         "Streaming request failed with status: {}",
-                        streaming.status
+                        streaming.status()
                     ))
                     .into_response();
                 }
 
                 // Pass through streaming chunks without transformation
-                let stream = stream::iter(streaming.chunks.into_iter().map(|chunk| {
-                    Ok::<_, std::convert::Infallible>(
-                        Event::default().data(serde_json::to_string(&chunk).unwrap_or_default()),
-                    )
-                }));
+                let stream = match streaming {
+                    crate::providers::StreamingChat::Collected { chunks, .. } => {
+                        stream::iter(chunks.into_iter().map(|chunk| {
+                            Ok::<_, std::convert::Infallible>(
+                                Event::default().data(serde_json::to_string(&chunk).unwrap_or_default()),
+                            )
+                        }))
+                        .boxed()
+                    }
+                    crate::providers::StreamingChat::Streamed { stream, .. } => {
+                        stream
+                            .map(|chunk| {
+                                Ok::<_, std::convert::Infallible>(
+                                    Event::default().data(serde_json::to_string(&chunk).unwrap_or_default()),
+                                )
+                            })
+                            .boxed()
+                    }
+                };
 
                 Sse::new(stream).into_response()
             }
@@ -911,11 +729,98 @@ pub async fn zhipu_chat_completions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        LoggingConfig, ProviderConfig, ProvidersConfig, RateLimitConfig, RoutingConfig,
-        ServerConfig,
+    use axum::{
+        body::Body,
+        extract::State,
+        http::{Request, StatusCode},
+        response::IntoResponse,
+        routing::post,
+        Json, Router,
     };
+    use crate::config::{
+        CodexCliConfig, LoggingConfig, ProviderConfig, ProvidersConfig, RateLimitConfig,
+        RoutingConfig, ServerConfig,
+    };
+    use http_body_util::BodyExt;
+    use serde_json::{json, Value};
     use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use tower::ServiceExt;
+
+    #[derive(Clone)]
+    struct MockResponsesUpstreamState {
+        recorded_requests: Arc<Mutex<Vec<Value>>>,
+        non_stream_response: Value,
+        stream_payloads: Vec<String>,
+    }
+
+    async fn mock_responses_endpoint(
+        State(state): State<MockResponsesUpstreamState>,
+        Json(body): Json<Value>,
+    ) -> impl IntoResponse {
+        state.recorded_requests.lock().unwrap().push(body.clone());
+
+        if body.get("stream").and_then(Value::as_bool).unwrap_or(false) {
+            let mut sse_body = String::new();
+            for payload in &state.stream_payloads {
+                sse_body.push_str("data: ");
+                sse_body.push_str(payload);
+                sse_body.push_str("\n\n");
+            }
+
+            return (
+                StatusCode::OK,
+                [("content-type", "text/event-stream")],
+                sse_body,
+            )
+                .into_response();
+        }
+
+        Json(state.non_stream_response.clone()).into_response()
+    }
+
+    async fn unexpected_chat_endpoint() -> impl IntoResponse {
+        (
+            StatusCode::IM_A_TEAPOT,
+            Json(json!({
+                "error": {
+                    "message": "chat completions endpoint should not be called for native responses requests"
+                }
+            })),
+        )
+            .into_response()
+    }
+
+    async fn spawn_mock_openai_responses_upstream(
+        non_stream_response: Value,
+        stream_payloads: Vec<String>,
+    ) -> (String, Arc<Mutex<Vec<Value>>>) {
+        let recorded_requests = Arc::new(Mutex::new(Vec::new()));
+        let state = MockResponsesUpstreamState {
+            recorded_requests: Arc::clone(&recorded_requests),
+            non_stream_response,
+            stream_payloads,
+        };
+
+        let app = Router::new()
+            .route("/v1/responses", post(mock_responses_endpoint))
+            .route("/v1/chat/completions", post(unexpected_chat_endpoint))
+            .with_state(state);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("mock upstream listener should bind");
+        let addr = listener
+            .local_addr()
+            .expect("mock upstream listener should have addr");
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("mock upstream server should serve");
+        });
+
+        (format!("http://{addr}"), recorded_requests)
+    }
 
     fn create_test_config() -> Config {
         Config {
@@ -948,6 +853,7 @@ mod tests {
                 format: "json".to_string(),
                 file_path: "logs/server.log".to_string(),
             },
+            codex_cli: CodexCliConfig::default(),
         }
     }
 
@@ -986,6 +892,31 @@ mod tests {
     }
 
     #[test]
+    fn test_provider_capabilities_differ_between_openai_and_zhipu() {
+        let config = create_test_config();
+        let state = AppState::new(config);
+
+        let openai = state
+            .get_provider_by_name("openai")
+            .expect("openai provider should exist");
+        let zhipu = state
+            .get_provider_by_name("zhipu")
+            .expect("zhipu provider should exist");
+
+        let openai_capabilities = openai.capabilities();
+        let zhipu_capabilities = zhipu.capabilities();
+
+        assert!(openai_capabilities.native_responses);
+        assert!(!zhipu_capabilities.native_responses);
+        assert!(openai_capabilities.supports_previous_response_id);
+        assert!(!zhipu_capabilities.supports_previous_response_id);
+        assert!(
+            openai_capabilities.supported_tool_types.len()
+                > zhipu_capabilities.supported_tool_types.len()
+        );
+    }
+
+    #[test]
     fn test_provider_not_configured_error() {
         let config = Config {
             server: ServerConfig {
@@ -1017,6 +948,7 @@ mod tests {
                 format: "json".to_string(),
                 file_path: "logs/server.log".to_string(),
             },
+            codex_cli: CodexCliConfig::default(),
         };
 
         let state = AppState::new(config);
@@ -1103,56 +1035,6 @@ mod tests {
     }
 
     #[test]
-    fn test_responses_stream_event_skips_empty_metadata_chunk() {
-        let chunk = ChatCompletionChunk {
-            id: "chatcmpl-empty".to_string(),
-            object: "chat.completion.chunk".to_string(),
-            created: 1234567890,
-            model: "glm-5".to_string(),
-            choices: vec![crate::models::chat::StreamingChoice {
-                index: 0,
-                delta: Some(crate::models::chat::Delta {
-                    role: Some("assistant".to_string()),
-                    content: None,
-                    tool_calls: None,
-                }),
-                finish_reason: None,
-                logprobs: None,
-            }],
-            usage: None,
-        };
-
-        assert!(responses_stream_event_from_chat_chunk(&chunk).is_none());
-    }
-
-    #[test]
-    fn test_responses_stream_event_keeps_usage_only_terminal_chunk() {
-        let chunk = ChatCompletionChunk {
-            id: "chatcmpl-terminal".to_string(),
-            object: "chat.completion.chunk".to_string(),
-            created: 1234567890,
-            model: "glm-5".to_string(),
-            choices: vec![crate::models::chat::StreamingChoice {
-                index: 0,
-                delta: Some(crate::models::chat::Delta {
-                    role: Some("assistant".to_string()),
-                    content: None,
-                    tool_calls: None,
-                }),
-                finish_reason: Some("stop".to_string()),
-                logprobs: None,
-            }],
-            usage: Some(crate::models::chat::Usage {
-                prompt_tokens: 10,
-                completion_tokens: 5,
-                total_tokens: 15,
-            }),
-        };
-
-        assert!(responses_stream_event_from_chat_chunk(&chunk).is_some());
-    }
-
-    #[test]
     fn test_responses_protocol_payloads_include_completed_event() {
         let chunks = vec![
             ChatCompletionChunk {
@@ -1199,6 +1081,40 @@ mod tests {
 
         assert!(payloads.iter().any(|payload| payload.contains(r#""type":"response.created""#)));
         assert!(payloads.iter().any(|payload| payload.contains(r#""type":"response.output_text.delta""#)));
+        assert!(payloads.iter().any(|payload| payload.contains(r#""type":"response.completed""#)));
+        assert_eq!(payloads.last().map(String::as_str), Some("[DONE]"));
+    }
+
+    #[test]
+    fn test_responses_protocol_payloads_emit_output_item_done_for_snake_case_terminal_chunk() {
+        let raw = json!({
+            "id": "resp_snake_case",
+            "object": "chat.completion.chunk",
+            "created": 1234567891u64,
+            "model": "glm-4-flash",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "content": ""
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15
+            }
+        });
+
+        let chunk: ChatCompletionChunk =
+            serde_json::from_value(raw).expect("terminal chunk should deserialize");
+        let payloads = responses_protocol_payloads_from_chat_chunks(&[chunk]);
+
+        assert!(payloads.iter().any(|payload| {
+            payload.contains(r#""type":"response.output_item.done""#)
+                && payload.contains(r#""status":"completed""#)
+        }));
         assert!(payloads.iter().any(|payload| payload.contains(r#""type":"response.completed""#)));
         assert_eq!(payloads.last().map(String::as_str), Some("[DONE]"));
     }
@@ -1265,5 +1181,508 @@ mod tests {
 
         assert!(payload_json.get("response").is_some());
         assert!(payload_json.get("response_id").is_none());
+    }
+
+    #[test]
+    fn test_responses_protocol_payloads_include_function_call_semantic_events() {
+        let chunks = vec![
+            ChatCompletionChunk {
+                id: "resp_tool".to_string(),
+                object: "chat.completion.chunk".to_string(),
+                created: 1234567890,
+                model: "glm-5".to_string(),
+                choices: vec![crate::models::chat::StreamingChoice {
+                    index: 0,
+                    delta: Some(crate::models::chat::Delta {
+                        role: Some("assistant".to_string()),
+                        content: None,
+                        tool_calls: Some(vec![crate::models::chat::ToolCall {
+                            id: "call_weather".to_string(),
+                            call_type: "function".to_string(),
+                            function: crate::models::chat::FunctionCall {
+                                name: "get_weather".to_string(),
+                                arguments: "{\"city\":\"Par".to_string(),
+                            },
+                        }]),
+                    }),
+                    finish_reason: None,
+                    logprobs: None,
+                }],
+                usage: None,
+            },
+            ChatCompletionChunk {
+                id: "resp_tool".to_string(),
+                object: "chat.completion.chunk".to_string(),
+                created: 1234567891,
+                model: "glm-5".to_string(),
+                choices: vec![crate::models::chat::StreamingChoice {
+                    index: 0,
+                    delta: Some(crate::models::chat::Delta {
+                        role: None,
+                        content: None,
+                        tool_calls: Some(vec![crate::models::chat::ToolCall {
+                            id: "call_weather".to_string(),
+                            call_type: "function".to_string(),
+                            function: crate::models::chat::FunctionCall {
+                                name: "get_weather".to_string(),
+                                arguments: "is\"}".to_string(),
+                            },
+                        }]),
+                    }),
+                    finish_reason: Some("tool_calls".to_string()),
+                    logprobs: None,
+                }],
+                usage: Some(crate::models::chat::Usage {
+                    prompt_tokens: 10,
+                    completion_tokens: 5,
+                    total_tokens: 15,
+                }),
+            },
+        ];
+
+        let payloads = responses_protocol_payloads_from_chat_chunks(&chunks);
+
+        assert!(payloads.iter().any(|payload| {
+            payload.contains(r#""type":"response.output_item.added""#)
+                && payload.contains(r#""type":"function_call""#)
+                && payload.contains(r#""call_id":"call_weather""#)
+        }));
+        assert!(payloads.iter().any(|payload| {
+            payload.contains(r#""type":"response.function_call_arguments.delta""#)
+                && payload.contains(r#""call_id":"call_weather""#)
+                && payload.contains(r#""delta":"{\"city\":\"Par""#)
+        }));
+        assert!(payloads.iter().any(|payload| {
+            payload.contains(r#""type":"response.function_call_arguments.done""#)
+                && payload.contains(r#""call_id":"call_weather""#)
+                && payload.contains(r#""arguments":"{\"city\":\"Paris\"}""#)
+        }));
+        assert!(payloads.iter().any(|payload| {
+            payload.contains(r#""type":"response.output_item.done""#)
+                && payload.contains(r#""type":"function_call""#)
+                && payload.contains(r#""status":"completed""#)
+        }));
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_handler_uses_native_responses_api_and_preserves_request_fields() {
+        let upstream_response = json!({
+            "id": "resp_native",
+            "object": "response",
+            "created_at": 1234567890u64,
+            "model": "gpt-4o",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "native responses path"
+                        }
+                    ]
+                }
+            ],
+            "usage": {
+                "input_tokens": 11,
+                "output_tokens": 7,
+                "total_tokens": 18
+            }
+        });
+        let (upstream_base_url, recorded_requests) =
+            spawn_mock_openai_responses_upstream(upstream_response, vec![]).await;
+
+        let mut config = create_test_config();
+        config.providers.openai = Some(ProviderConfig {
+            api_key: "test-key".to_string(),
+            base_url: format!("{upstream_base_url}/v1"),
+            default_model: "gpt-4o".to_string(),
+            timeout: 5,
+        });
+        config.providers.zhipu.api_key = "".to_string();
+        config.routing.default = "openai".to_string();
+
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let request_body = json!({
+            "model": "gpt-4o",
+            "instructions": "system prompt",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "hello"
+                        }
+                    ]
+                }
+            ],
+            "previous_response_id": "resp_prev_123",
+            "include": ["reasoning.encrypted_content", "web_search_call.action.sources"],
+            "tool_choice": "auto",
+            "parallel_tool_calls": false,
+            "stream": false
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&request_body).expect("request should serialize"),
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("response should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes();
+        let body_json: Value =
+            serde_json::from_slice(&body).expect("response body should be json");
+        assert_eq!(body_json.get("id").and_then(Value::as_str), Some("resp_native"));
+
+        let recorded = recorded_requests.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "native responses path should hit /v1/responses once");
+        let upstream_request = &recorded[0];
+        assert_eq!(
+            upstream_request
+                .get("previous_response_id")
+                .and_then(Value::as_str),
+            Some("resp_prev_123")
+        );
+        assert_eq!(
+            upstream_request.get("include").and_then(Value::as_array).map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+            }),
+            Some(vec![
+                "reasoning.encrypted_content",
+                "web_search_call.action.sources",
+            ])
+        );
+        assert_eq!(
+            upstream_request
+                .get("parallel_tool_calls")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            upstream_request.get("tool_choice").and_then(Value::as_str),
+            Some("auto")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_streaming_handler_forwards_native_responses_events() {
+        let stream_payloads = vec![
+            json!({
+                "type": "response.created",
+                "response": {
+                    "id": "resp_stream",
+                    "object": "response",
+                    "created_at": 1234567890u64,
+                    "status": "in_progress",
+                    "model": "gpt-4o",
+                    "output": [],
+                    "usage": null
+                }
+            })
+            .to_string(),
+            json!({
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_stream",
+                    "object": "response",
+                    "created_at": 1234567891u64,
+                    "status": "completed",
+                    "model": "gpt-4o",
+                    "output": [],
+                    "usage": {
+                        "input_tokens": 5,
+                        "output_tokens": 3,
+                        "total_tokens": 8
+                    }
+                }
+            })
+            .to_string(),
+            "[DONE]".to_string(),
+        ];
+        let (upstream_base_url, recorded_requests) =
+            spawn_mock_openai_responses_upstream(json!({}), stream_payloads).await;
+
+        let mut config = create_test_config();
+        config.providers.openai = Some(ProviderConfig {
+            api_key: "test-key".to_string(),
+            base_url: format!("{upstream_base_url}/v1"),
+            default_model: "gpt-4o".to_string(),
+            timeout: 5,
+        });
+        config.providers.zhipu.api_key = "".to_string();
+        config.routing.default = "openai".to_string();
+
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let request_body = json!({
+            "model": "gpt-4o",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "stream hello"
+                        }
+                    ]
+                }
+            ],
+            "previous_response_id": "resp_prev_stream",
+            "stream": true
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&request_body).expect("request should serialize"),
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("response should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("stream body should collect")
+            .to_bytes();
+        let body_str = String::from_utf8(body.to_vec()).expect("sse body should be utf8");
+        assert!(
+            body_str.contains(r#""type":"response.created""#),
+            "stream should forward native response.created event"
+        );
+        assert!(
+            body_str.contains(r#""type":"response.completed""#),
+            "stream should forward native response.completed event"
+        );
+        assert!(
+            body_str.contains("[DONE]"),
+            "stream should forward native done marker"
+        );
+
+        let recorded = recorded_requests.lock().unwrap();
+        assert_eq!(recorded.len(), 1, "streaming path should hit /v1/responses once");
+        assert_eq!(
+            recorded[0]
+                .get("previous_response_id")
+                .and_then(Value::as_str),
+            Some("resp_prev_stream")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_zhipu_responses_rejects_previous_response_id_in_chat_fallback() {
+        let mut config = create_test_config();
+        config.providers.openai = None;
+        config.routing.default = "zhipu".to_string();
+
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let request_body = json!({
+            "model": "glm-5",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "hello"
+                        }
+                    ]
+                }
+            ],
+            "previous_response_id": "resp_prev_unsupported"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&request_body).expect("request should serialize"),
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("response should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes();
+        let body_json: Value =
+            serde_json::from_slice(&body).expect("response body should be json");
+        let message = body_json
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+
+        assert!(
+            message.contains("previous_response_id"),
+            "expected previous_response_id rejection, got: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_zhipu_responses_rejects_non_function_tools_in_chat_fallback() {
+        let mut config = create_test_config();
+        config.providers.openai = None;
+        config.routing.default = "zhipu".to_string();
+
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let request_body = json!({
+            "model": "glm-5",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "search docs"
+                        }
+                    ]
+                }
+            ],
+            "tools": [
+                {
+                    "type": "file_search",
+                    "vector_store_ids": ["vs_123"]
+                }
+            ]
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&request_body).expect("request should serialize"),
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("response should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes();
+        let body_json: Value =
+            serde_json::from_slice(&body).expect("response body should be json");
+        let message = body_json
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+
+        assert!(
+            message.contains("file_search"),
+            "expected file_search rejection, got: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_zhipu_responses_rejects_include_in_chat_fallback() {
+        let mut config = create_test_config();
+        config.providers.openai = None;
+        config.routing.default = "zhipu".to_string();
+
+        let app = crate::server::router::create_router(Arc::new(AppState::new(config)));
+        let request_body = json!({
+            "model": "glm-5",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "think deeply"
+                        }
+                    ]
+                }
+            ],
+            "include": ["reasoning.encrypted_content"],
+            "reasoning": {
+                "effort": "high"
+            }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&request_body).expect("request should serialize"),
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("response should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes();
+        let body_json: Value =
+            serde_json::from_slice(&body).expect("response body should be json");
+        let message = body_json
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+
+        // include is now allowed (just logged as warning) - the error is from provider auth
+        assert!(
+            !message.contains("include"),
+            "expected include NOT to be rejected, got: {message}"
+        );
     }
 }

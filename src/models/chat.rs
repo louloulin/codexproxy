@@ -8,7 +8,7 @@ use std::collections::HashMap;
 /// Chat Completions Request
 /// POST /v1/chat/completions
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct ChatRequest {
     /// ID of the model to use
     pub model: String,
@@ -87,6 +87,84 @@ pub struct ChatRequest {
     /// Whether to enable parallel function calling
     #[serde(default = "default_parallel_tool_calls")]
     pub parallel_tool_calls: bool,
+}
+
+impl ChatRequest {
+    /// Create a ChatRequest from a ResponsesRequest (for chat fallback)
+    pub fn from_responses_request(req: &crate::models::response::ResponsesRequest) -> Self {
+        use crate::models::response::{ContentBlock, Item};
+
+        // Convert input items to messages
+        let mut messages = Vec::new();
+        for item in &req.input {
+            match item {
+                Item::Message(msg) => {
+                    let mut content = String::new();
+                    for block in &msg.content {
+                        match block {
+                            ContentBlock::InputText(text) => {
+                                content.push_str(&text.text);
+                            }
+                            ContentBlock::InputImage(_image) => {
+                                // For now, just append a placeholder
+                                content.push_str("[Image]");
+                            }
+                            _ => {}
+                        }
+                    }
+                    messages.push(Message {
+                        role: msg.role.clone(),
+                        content: Some(content),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
+                }
+                Item::Reasoning(reasoning) => {
+                    // Include reasoning summary if available
+                    if !reasoning.summary.is_empty() {
+                        let summary_text = reasoning.summary.iter()
+                            .filter_map(|s| s.text.clone())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        if !summary_text.is_empty() {
+                            messages.push(Message {
+                                role: "user".to_string(),
+                                content: Some(format!("[Reasoning: {}]", summary_text)),
+                                name: None,
+                                tool_calls: None,
+                                tool_call_id: None,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        ChatRequest {
+            model: req.model.clone(),
+            messages,
+            temperature: req.temperature,
+            top_p: req.top_p,
+            max_tokens: req.max_tokens,
+            stream: req.stream,
+            stop: None,
+            n: 1,
+            stream_options: None,
+            include_usage: Some(true),
+            response_format: None,
+            seed: None,
+            organization: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            logit_bias: None,
+            user: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: true,
+        }
+    }
 }
 
 fn default_n() -> u32 {
@@ -255,7 +333,7 @@ pub struct ChatResponse {
     pub service_tier: Option<String>,
 
     /// The reason the model stopped generating tokens
-    #[serde(default)]
+    #[serde(alias = "finish_reason", default)]
     pub finish_reason: Option<String>,
 
     /// A list of additional properties
@@ -274,7 +352,7 @@ pub struct Choice {
     pub message: Message,
 
     /// The reason the model stopped generating tokens
-    #[serde(default)]
+    #[serde(alias = "finish_reason", default)]
     pub finish_reason: Option<String>,
 
     /// Log probability information for the choice
@@ -360,7 +438,7 @@ pub struct StreamingChoice {
     pub delta: Option<Delta>,
 
     /// The reason the model stopped generating tokens
-    #[serde(default)]
+    #[serde(alias = "finish_reason", default)]
     pub finish_reason: Option<String>,
 
     /// Log probability information for the choice
@@ -381,6 +459,60 @@ pub struct Delta {
     pub content: Option<String>,
 
     /// Tool calls that the model wants to make
-    #[serde(default)]
+    #[serde(alias = "tool_calls", default)]
     pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chat_completion_chunk_deserializes_snake_case_stream_fields() {
+        let raw = serde_json::json!({
+            "id": "chatcmpl-test",
+            "object": "chat.completion.chunk",
+            "created": 1234567890u64,
+            "model": "glm-4-flash",
+            "choices": [{
+                "index": 0,
+                "finish_reason": "stop",
+                "delta": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "echo",
+                            "arguments": "{\"value\":1}"
+                        }
+                    }]
+                }
+            }],
+            "usage": {
+                "prompt_tokens": 12,
+                "completion_tokens": 10,
+                "total_tokens": 22
+            }
+        });
+
+        let chunk: ChatCompletionChunk =
+            serde_json::from_value(raw).expect("chunk should deserialize");
+        let choice = chunk.choices.first().expect("choice should exist");
+        let delta = choice.delta.as_ref().expect("delta should exist");
+
+        assert_eq!(choice.finish_reason.as_deref(), Some("stop"));
+        assert_eq!(delta.role.as_deref(), Some("assistant"));
+        assert_eq!(delta.content.as_deref(), Some(""));
+        assert_eq!(
+            delta
+                .tool_calls
+                .as_ref()
+                .and_then(|tool_calls| tool_calls.first())
+                .map(|tool_call| tool_call.function.name.as_str()),
+            Some("echo")
+        );
+        assert_eq!(chunk.usage.as_ref().map(|usage| usage.total_tokens), Some(22));
+    }
 }

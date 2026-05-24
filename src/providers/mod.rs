@@ -16,8 +16,11 @@ pub mod zhipu;
 
 // Re-export types
 pub use openai::OpenAIProvider;
-pub use trait_::{LLMProvider, StreamingChat};
+pub use trait_::{LLMProvider, StreamingChat, StreamingResponses};
 pub use zhipu::ZhipuProvider;
+
+// Re-export SSE utilities for internal use within providers crate
+pub(crate) use openai::{drain_complete_sse_payloads, extract_sse_data_payload};
 
 /// Provider-specific error types
 #[derive(Debug, Error)]

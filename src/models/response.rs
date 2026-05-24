@@ -8,7 +8,6 @@ use std::collections::HashMap;
 /// Responses API Request
 /// POST /v1/responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ResponsesRequest {
     /// ID of the model to use
     pub model: String,
@@ -25,40 +24,56 @@ pub struct ResponsesRequest {
     #[serde(default)]
     pub tools: Vec<Tool>,
 
+    /// Tool choice controls for the model
+    #[serde(rename = "tool_choice", default)]
+    pub tool_choice: Option<serde_json::Value>,
+
+    /// Whether the model may call tools in parallel
+    #[serde(rename = "parallel_tool_calls", default)]
+    pub parallel_tool_calls: Option<bool>,
+
     /// Temperature value for sampling
     #[serde(default)]
     pub temperature: Option<f32>,
 
     /// Nucleus sampling parameter
-    #[serde(default)]
+    #[serde(rename = "top_p", default)]
     pub top_p: Option<f32>,
 
     /// Maximum number of tokens to generate
-    #[serde(default)]
+    #[serde(rename = "max_output_tokens", alias = "max_tokens", default)]
     pub max_tokens: Option<u32>,
 
     /// Whether to stream the response
     #[serde(default)]
     pub stream: Option<bool>,
 
+    /// Optional list of extra fields to include in the response
+    #[serde(default)]
+    pub include: Vec<String>,
+
     /// Format specification for text output
     #[serde(default)]
     pub text: Option<TextFormat>,
 
     /// Enable structured outputs
-    #[serde(default)]
+    #[serde(rename = "structured_output", default)]
     pub structured_output: Option<StructuredOutput>,
 
     /// Store the response for future retrieval
     #[serde(default)]
     pub store: Option<bool>,
 
+    /// Use a previous response as the conversation state anchor
+    #[serde(rename = "previous_response_id", default)]
+    pub previous_response_id: Option<String>,
+
     /// Metadata about the request
     #[serde(default)]
     pub metadata: Option<HashMap<String, serde_json::Value>>,
 
     /// Model settings
-    #[serde(default)]
+    #[serde(rename = "model_settings", default)]
     pub model_settings: Option<ModelSettings>,
 
     /// Settings for reasoning effort
@@ -76,6 +91,18 @@ pub struct ResponsesRequest {
     /// User identifier
     #[serde(default)]
     pub user: Option<String>,
+
+    /// Optional service tier selector
+    #[serde(rename = "service_tier", default)]
+    pub service_tier: Option<String>,
+
+    /// Optional prompt cache key
+    #[serde(rename = "prompt_cache_key", default)]
+    pub prompt_cache_key: Option<String>,
+
+    /// Optional namespace for response storage (used by Codex CLI)
+    #[serde(default)]
+    pub namespace: Option<String>,
 }
 
 /// Message phase for distinguishing intermediate vs final content
@@ -133,7 +160,7 @@ pub struct MessageItem {
     pub content: Vec<ContentBlock>,
 
     /// Whether this is the end of the turn
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "end_turn", default, skip_serializing_if = "Option::is_none")]
     pub end_turn: Option<bool>,
 
     /// The phase of the message (commentary or final answer)
@@ -203,7 +230,7 @@ struct MessageItemCompat {
     id: Option<String>,
     role: String,
     content: MessageContentCompat,
-    #[serde(default)]
+    #[serde(rename = "end_turn", default)]
     end_turn: Option<bool>,
     #[serde(default)]
     phase: Option<MessagePhase>,
@@ -945,6 +972,7 @@ pub struct ResponsesResponse {
     pub object: String,
 
     /// Unix timestamp when the response was created
+    #[serde(alias = "created_at")]
     pub created: u64,
 
     /// Model used for the response
@@ -952,6 +980,10 @@ pub struct ResponsesResponse {
 
     /// Output items from the model
     pub output: Vec<OutputItem>,
+
+    /// Text content for backwards compatibility (Codex CLI may expect this)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 
     /// Usage statistics
     #[serde(default)]
@@ -977,6 +1009,7 @@ pub struct ResponsesStreamChunk {
     pub object: String,
 
     /// Unix timestamp when the chunk was created
+    #[serde(alias = "created_at")]
     pub created: u64,
 
     /// Model used for the response
@@ -984,6 +1017,10 @@ pub struct ResponsesStreamChunk {
 
     /// Output items included in this chunk
     pub output: Vec<OutputItem>,
+
+    /// Text content for backwards compatibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 
     /// Usage statistics, usually only present on the terminal chunk
     #[serde(default)]
@@ -1023,6 +1060,7 @@ pub enum OutputItem {
 #[serde(rename_all = "camelCase")]
 pub struct MessageOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Optional ID of the message
@@ -1087,6 +1125,7 @@ pub struct FunctionCallOutputFunction {
 #[serde(rename_all = "camelCase")]
 pub struct ReasoningOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Optional ID
@@ -1107,6 +1146,7 @@ pub struct ReasoningOutput {
 #[serde(rename_all = "camelCase")]
 pub struct FunctionCallOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Optional ID
@@ -1114,6 +1154,7 @@ pub struct FunctionCallOutput {
     pub id: Option<String>,
 
     /// ID of the function call
+    #[serde(rename = "call_id")]
     pub call_id: String,
 
     /// The name of the function
@@ -1132,6 +1173,7 @@ pub struct FunctionCallOutput {
 #[serde(rename_all = "camelCase")]
 pub struct LocalShellCallOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Optional ID
@@ -1155,6 +1197,7 @@ pub struct LocalShellCallOutput {
 #[serde(rename_all = "camelCase")]
 pub struct ToolSearchCallOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Optional ID
@@ -1182,6 +1225,7 @@ pub struct ToolSearchCallOutput {
 #[serde(rename_all = "camelCase")]
 pub struct CustomToolCallOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Optional ID
@@ -1207,6 +1251,7 @@ pub struct CustomToolCallOutput {
 #[serde(rename_all = "camelCase")]
 pub struct CustomToolCallOutputResult {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Call ID that this output corresponds to
@@ -1225,6 +1270,7 @@ pub struct CustomToolCallOutputResult {
 #[serde(rename_all = "camelCase")]
 pub struct ToolSearchOutputResult {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Call ID for the search
@@ -1248,6 +1294,7 @@ pub struct ToolSearchOutputResult {
 #[serde(rename_all = "camelCase")]
 pub struct WebSearchCallOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Optional ID
@@ -1268,6 +1315,7 @@ pub struct WebSearchCallOutput {
 #[serde(rename_all = "camelCase")]
 pub struct ImageGenerationCallOutput {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// ID of the image generation call
@@ -1290,6 +1338,7 @@ pub struct ImageGenerationCallOutput {
 #[serde(rename_all = "camelCase")]
 pub struct McpToolCallOutputResult {
     /// Index of the output item
+    #[serde(default)]
     pub index: u32,
 
     /// Call ID that this output corresponds to

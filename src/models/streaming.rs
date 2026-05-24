@@ -471,3 +471,176 @@ pub fn build_sse_event(event: &ResponseEvent) -> String {
 pub fn build_done_event() -> String {
     "data: [DONE]\n\n".to_string()
 }
+
+// ============================================================================
+// Codex CLI Specific Events
+// ============================================================================
+
+/// Codex CLI event types for event-streaming protocol
+/// These events are sent by Codex CLI before/after the actual request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CodexCliEvent {
+    /// Thread started event - indicates a new conversation thread
+    #[serde(rename = "thread.started")]
+    ThreadStarted {
+        /// Unique thread identifier
+        thread_id: String,
+        /// Optional session identifier
+        #[serde(default)]
+        session_id: Option<String>,
+    },
+
+    /// Turn started event - indicates a new turn in the conversation
+    #[serde(rename = "turn.started")]
+    TurnStarted {
+        /// Unique turn identifier
+        turn_id: String,
+        /// Thread ID if known
+        #[serde(default)]
+        thread_id: Option<String>,
+        /// Parent turn ID for branching
+        #[serde(default)]
+        parent_turn_id: Option<String>,
+    },
+
+    /// Thread metadata updated
+    #[serde(rename = "thread.metadata_updated")]
+    ThreadMetadataUpdated {
+        /// Thread identifier
+        thread_id: String,
+        /// Metadata key
+        key: String,
+        /// Metadata value
+        value: serde_json::Value,
+    },
+
+    /// Request submitted event
+    #[serde(rename = "request.submitted")]
+    RequestSubmitted {
+        /// Request ID
+        request_id: String,
+        /// Thread ID
+        thread_id: String,
+        /// Turn ID
+        turn_id: String,
+    },
+
+    /// Response generation started
+    #[serde(rename = "response.generation_started")]
+    ResponseGenerationStarted {
+        /// Response ID
+        response_id: String,
+        /// Turn ID
+        turn_id: String,
+    },
+
+    /// Turn completed event
+    #[serde(rename = "turn.completed")]
+    TurnCompleted {
+        /// Turn identifier
+        turn_id: String,
+        /// Thread ID
+        thread_id: String,
+    },
+
+    /// Turn failed event
+    #[serde(rename = "turn.failed")]
+    TurnFailed {
+        /// Turn identifier
+        turn_id: String,
+        /// Thread ID
+        thread_id: String,
+        /// Error message
+        error: String,
+    },
+
+    /// Session metadata event
+    #[serde(rename = "session.metadata")]
+    SessionMetadata {
+        /// Session identifier
+        session_id: String,
+        /// Metadata key
+        key: String,
+        /// Metadata value
+        value: serde_json::Value,
+    },
+}
+
+/// Parse a line as potential Codex CLI event
+/// Returns None if the line is not a Codex CLI event (e.g., it's a standard request)
+pub fn try_parse_codex_cli_event(line: &str) -> Option<CodexCliEvent> {
+    // Skip SSE prefix if present
+    let trimmed = line.trim_start_matches("data: ").trim();
+
+    // Skip empty lines
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Try to parse as CodexCliEvent
+    serde_json::from_str(trimmed).ok()
+}
+
+/// Check if a line is a Codex CLI event (vs standard request)
+pub fn is_codex_cli_event(line: &str) -> bool {
+    try_parse_codex_cli_event(line).is_some()
+}
+
+/// Codex CLI stream state for tracking conversation context
+#[derive(Debug, Clone, Default)]
+pub struct CodexCliStreamState {
+    /// Current thread ID
+    pub thread_id: Option<String>,
+    /// Current turn ID
+    pub turn_id: Option<String>,
+    /// Session ID
+    pub session_id: Option<String>,
+    /// Whether we've seen the actual request
+    pub request_received: bool,
+}
+
+impl CodexCliStreamState {
+    /// Create a new empty state
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Update state with an event
+    pub fn update(&mut self, event: &CodexCliEvent) {
+        match event {
+            CodexCliEvent::ThreadStarted { thread_id, session_id } => {
+                self.thread_id = Some(thread_id.clone());
+                if let Some(sid) = session_id {
+                    self.session_id = Some(sid.clone());
+                }
+            }
+            CodexCliEvent::TurnStarted { turn_id, thread_id, .. } => {
+                self.turn_id = Some(turn_id.clone());
+                if let Some(tid) = thread_id {
+                    self.thread_id = Some(tid.clone());
+                }
+            }
+            CodexCliEvent::RequestSubmitted { thread_id, turn_id, .. } => {
+                self.request_received = true;
+                if self.thread_id.is_none() {
+                    self.thread_id = Some(thread_id.clone());
+                }
+                if self.turn_id.is_none() {
+                    self.turn_id = Some(turn_id.clone());
+                }
+            }
+            CodexCliEvent::ResponseGenerationStarted { turn_id, .. } => {
+                if self.turn_id.is_none() {
+                    self.turn_id = Some(turn_id.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Check if we have enough context to proceed
+    pub fn is_ready(&self) -> bool {
+        self.thread_id.is_some() || self.turn_id.is_some()
+    }
+}
