@@ -315,3 +315,4 @@ mod tests {
         assert_eq!(logged, body);
     }
 }
+pub mod routing;
