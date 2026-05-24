@@ -304,3 +304,198 @@ mod tests {
     }
 }
 
+    
+    // mimo2codex aligned tests (matching respToResponses.test.ts)
+    
+    #[test]
+    fn test_chat_to_responses_plain_text() {
+        use crate::models::chat::{ChatResponse, Choice, Message};
+        
+        let chat = ChatResponse {
+            id: "chatcmpl_123".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1700000000,
+            model: "gpt-4".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                finish_reason: Some("stop".to_string()),
+                message: Message {
+                    role: "assistant".to_string(),
+                    content: Some("hello world".to_string()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                logprobs: None,
+            }],
+            usage: Some(crate::models::chat::Usage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            }),
+            service_tier: None,
+            finish_reason: None,
+            extra: std::collections::HashMap::new(),
+        };
+        
+        let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
+        assert_eq!(responses.status, "completed");
+        assert_eq!(responses.output.len(), 1);
+        assert_eq!(responses.usage.as_ref().unwrap().input_tokens, 10);
+        assert_eq!(responses.usage.as_ref().unwrap().output_tokens, 20);
+    }
+    
+    #[test]
+    fn test_chat_to_responses_with_reasoning() {
+        use crate::models::chat::{ChatResponse, Choice, Message};
+        
+        let chat = ChatResponse {
+            id: "chatcmpl_123".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1700000000,
+            model: "deepseek-chat".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                finish_reason: Some("stop".to_string()),
+                message: Message {
+                    role: "assistant".to_string(),
+                    content: Some("answer".to_string()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                logprobs: None,
+            }],
+            usage: Some(crate::models::chat::Usage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            }),
+            service_tier: None,
+            finish_reason: None,
+            extra: std::collections::HashMap::new(),
+        };
+        
+        let mut opts = ChatToResponsesOptions::default();
+        opts.expose_reasoning = true;
+        
+        let responses = chat_to_responses(&chat, &opts);
+        assert_eq!(responses.status, "completed");
+    }
+    
+    #[test]
+    fn test_chat_to_responses_with_function_call() {
+        use crate::models::chat::{ChatResponse, Choice, Message, ToolCall, FunctionCall};
+        
+        let chat = ChatResponse {
+            id: "chatcmpl_456".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1700000000,
+            model: "gpt-4".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                finish_reason: Some("tool_calls".to_string()),
+                message: Message {
+                    role: "assistant".to_string(),
+                    content: None,
+                    name: None,
+                    tool_calls: Some(vec![ToolCall {
+                        id: "call_1".to_string(),
+                        call_type: "function".to_string(),
+                        function: FunctionCall {
+                            name: "shell".to_string(),
+                            arguments: r#"{"cmd":"ls"}"#.to_string(),
+                        },
+                    }]),
+                    tool_call_id: None,
+                },
+                logprobs: None,
+            }],
+            usage: Some(crate::models::chat::Usage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            }),
+            service_tier: None,
+            finish_reason: None,
+            extra: std::collections::HashMap::new(),
+        };
+        
+        let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
+        assert_eq!(responses.output.len(), 1);
+        
+        if let crate::models::response::OutputItem::FunctionCall(fc) = &responses.output[0] {
+            assert_eq!(fc.name, "shell");
+            assert_eq!(fc.arguments, r#"{"cmd":"ls"}"#);
+        }
+    }
+    
+    #[test]
+    fn test_chat_to_responses_with_usage() {
+        use crate::models::chat::{ChatResponse, Choice, Message};
+        
+        let chat = ChatResponse {
+            id: "chatcmpl_789".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1700000000,
+            model: "gpt-4".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                finish_reason: Some("stop".to_string()),
+                message: Message {
+                    role: "assistant".to_string(),
+                    content: Some("test".to_string()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                logprobs: None,
+            }],
+            usage: Some(crate::models::chat::Usage {
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                total_tokens: 150,
+            }),
+            service_tier: None,
+            finish_reason: None,
+            extra: std::collections::HashMap::new(),
+        };
+        
+        let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
+        assert!(responses.usage.is_some());
+        assert_eq!(responses.usage.as_ref().unwrap().input_tokens, 100);
+        assert_eq!(responses.usage.as_ref().unwrap().output_tokens, 50);
+        assert_eq!(responses.usage.as_ref().unwrap().total_tokens, 150);
+    }
+    
+    #[test]
+    fn test_chat_to_responses_incomplete() {
+        use crate::models::chat::{ChatResponse, Choice, Message};
+        
+        let chat = ChatResponse {
+            id: "chatcmpl_incomplete".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1700000000,
+            model: "gpt-4".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                finish_reason: Some("length".to_string()),
+                message: Message {
+                    role: "assistant".to_string(),
+                    content: Some("truncated...".to_string()),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                logprobs: None,
+            }],
+            usage: None,
+            service_tier: None,
+            finish_reason: None,
+            extra: std::collections::HashMap::new(),
+        };
+        
+        let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
+        assert_eq!(responses.output.len(), 1);
+    }
+
