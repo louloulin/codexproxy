@@ -49,6 +49,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # 异步流
 futures = "0.3"
+tokio-stream = "0.1"
 
 # HTTP Body 类型
 bytes = "1"

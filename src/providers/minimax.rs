@@ -5,13 +5,20 @@
 
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
+use futures::stream::BoxStream;
 use reqwest::Client;
 use serde_json::Value;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::config::ProviderConfig;
 use crate::models::chat::{ChatCompletionChunk, ChatRequest, ChatResponse};
-use crate::models::response::{ResponsesRequest, ResponsesResponse};
+use crate::models::response::{ResponsesRequest, ResponsesResponse, ResponsesStreamChunk};
 use crate::protocol::capabilities::ProviderCapabilities;
+use crate::transform::{
+    transform_responses_to_chat_request, transform_chat_to_responses_response,
+    transform_chat_stream_to_responses_stream,
+};
 
 use super::{
     build_http_client, drain_complete_sse_payloads, extract_provider_error_details,
@@ -238,61 +245,135 @@ impl LLMProvider for MiniMaxProvider {
             )));
         }
 
-        // Process SSE stream
-        let mut buffer = String::new();
-        let mut chunks: Vec<ChatCompletionChunk> = Vec::new();
+        // Process SSE stream with true streaming (low latency)
+        // Spawn a task to read from the HTTP stream and yield chunks in real-time
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatCompletionChunk, ProviderError>>(32);
 
-        let mut stream = resp.bytes_stream();
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(bytes) => {
-                    if let Ok(text) = String::from_utf8(bytes.to_vec()) {
-                        buffer.push_str(&text);
-                        let payloads = drain_complete_sse_payloads(&mut buffer);
-                        for payload in payloads {
-                            if payload == "[DONE]" {
-                                continue;
-                            }
-                            // Try to parse as ChatCompletionChunk
-                            if let Ok(chunk) = serde_json::from_str::<ChatCompletionChunk>(&payload) {
-                                chunks.push(chunk);
-                            } else {
-                                // MiniMax may have different streaming format
-                                tracing::debug!(
-                                    payload_preview = %truncate_for_log(&payload, 100),
-                                    "MiniMax streaming payload (non-standard)"
-                                );
+        // Spawn task to read SSE stream and send chunks to channel
+        tokio::spawn(async move {
+            let mut buffer = String::new();
+
+            // Read the response body as a stream
+            let mut stream = resp.bytes_stream();
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(bytes) => {
+                        if let Ok(text) = String::from_utf8(bytes.to_vec()) {
+                            buffer.push_str(&text);
+                            let payloads = drain_complete_sse_payloads(&mut buffer);
+                            for payload in payloads {
+                                if payload == "[DONE]" {
+                                    continue;
+                                }
+                                // Try to parse as ChatCompletionChunk
+                                if let Ok(chunk) = serde_json::from_str::<ChatCompletionChunk>(&payload) {
+                                    if tx.send(Ok(chunk)).await.is_err() {
+                                        // Receiver dropped, stop sending
+                                        return;
+                                    }
+                                } else {
+                                    tracing::debug!(
+                                        payload_preview = %truncate_for_log(&payload, 100),
+                                        "MiniMax streaming payload (non-standard)"
+                                    );
+                                }
                             }
                         }
                     }
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "MiniMax streaming error");
-                    return Err(ProviderError::RequestFailed(e.to_string()));
+                    Err(e) => {
+                        tracing::error!(error = %e, "MiniMax streaming error");
+                        let _ = tx.send(Err(ProviderError::RequestFailed(e.to_string()))).await;
+                        return;
+                    }
                 }
             }
-        }
+            // Stream ended normally
+        });
 
-        tracing::info!(chunk_count = chunks.len(), "MiniMax streaming completed");
+        // Create the stream from the receiver
+        let stream = tokio_stream:: wrappers::ReceiverStream::new(rx)
+            .map(|result| result.expect("channel error should be handled in spawn"));
+        let boxed_stream: BoxStream<'static, ChatCompletionChunk> = Box::pin(stream);
 
-        Ok(StreamingChat::Collected {
+        tracing::info!("MiniMax streaming started (true streaming mode)");
+
+        Ok(StreamingChat::Streamed {
             status: 200,
-            chunks,
+            stream: boxed_stream,
         })
     }
 
-    async fn responses(&self, _request: ResponsesRequest) -> Result<ResponsesResponse, ProviderError> {
-        // MiniMax doesn't have a native Responses API - use chat fallback
-        Err(ProviderError::InvalidRequest(
-            "MiniMax: Native Responses API not supported, use chat fallback".to_string(),
-        ))
+    async fn responses(&self, request: ResponsesRequest) -> Result<ResponsesResponse, ProviderError> {
+        // MiniMax doesn't have a native Responses API - convert to Chat and call chat()
+        let mut chat_req = transform_responses_to_chat_request(&request);
+
+        // Use the converted chat request
+        if chat_req.model.is_empty() {
+            chat_req.model = request.model.clone();
+        }
+        if chat_req.model.is_empty() {
+            chat_req.model = "MiniMax-M2.7".to_string();
+        }
+
+        let chat_resp = self.chat(chat_req).await?;
+
+        // Convert Chat response back to Responses format
+        let responses_resp = transform_chat_to_responses_response(&chat_resp);
+        Ok(responses_resp)
     }
 
-    async fn responses_streaming(&self, _request: ResponsesRequest) -> Result<StreamingResponses, ProviderError> {
-        // MiniMax doesn't have a native Responses API - use chat fallback
-        Err(ProviderError::InvalidRequest(
-            "MiniMax: Native Responses API not supported, use chat fallback".to_string(),
-        ))
+    async fn responses_streaming(&self, request: ResponsesRequest) -> Result<StreamingResponses, ProviderError> {
+        // MiniMax doesn't have a native Responses API - convert to Chat and call chat_streaming()
+        let mut chat_req = transform_responses_to_chat_request(&request);
+
+        // Use the converted chat request
+        if chat_req.model.is_empty() {
+            chat_req.model = request.model.clone();
+        }
+        if chat_req.model.is_empty() {
+            chat_req.model = "MiniMax-M2.7".to_string();
+        }
+
+        // Get chat streaming
+        let streaming_chat = self.chat_streaming(chat_req).await?;
+
+        // Chat streaming uses StreamingChat enum, need to handle both Collected and Streamed cases
+        match streaming_chat {
+            StreamingChat::Streamed { status, stream } => {
+                // Transform each ChatCompletionChunk to ResponsesStreamChunk then to SSE string
+                // Use filter_map to drop errors silently (log them instead)
+                let transformed_stream = stream
+                    .filter_map(|chat_chunk| async move {
+                        let responses_chunk = transform_chat_stream_to_responses_stream(&chat_chunk);
+                        match serde_json::to_string(&responses_chunk) {
+                            Ok(payload) => Some(format!("data: {}\n\n", payload)),
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to serialize responses chunk");
+                                None
+                            }
+                        }
+                    });
+
+                let boxed_stream: BoxStream<'static, String> = Box::pin(transformed_stream);
+                Ok(StreamingResponses { status, events: boxed_stream })
+            }
+            StreamingChat::Collected { status, chunks } => {
+                // For collected, transform each chunk then emit
+                let responses_chunks: Vec<ResponsesStreamChunk> = chunks
+                    .iter()
+                    .map(|chunk| transform_chat_stream_to_responses_stream(chunk))
+                    .collect();
+
+                let events: Vec<String> = responses_chunks
+                    .iter()
+                    .filter_map(|chunk| serde_json::to_string(chunk).ok())
+                    .map(|payload| format!("data: {}\n\n", payload))
+                    .collect();
+
+                let boxed_stream: BoxStream<'static, String> = Box::pin(stream::iter(events));
+                Ok(StreamingResponses { status, events: boxed_stream })
+            }
+        }
     }
 
     async fn health_check(&self) -> bool {
