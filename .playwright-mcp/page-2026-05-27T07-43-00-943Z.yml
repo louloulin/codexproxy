@@ -1,0 +1,151 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]: rcodex
+      - generic [ref=e9]: admin
+    - navigation [ref=e10]:
+      - generic [ref=e11]: Overview
+      - link "Dashboard" [ref=e12] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e13]
+        - generic [ref=e18]: Dashboard
+      - generic [ref=e19]: Management
+      - link "Codex" [ref=e20] [cursor=pointer]:
+        - /url: /codex
+        - img [ref=e21]
+        - generic [ref=e24]: Codex
+      - link "Providers" [ref=e25] [cursor=pointer]:
+        - /url: /providers
+        - img [ref=e26]
+        - generic [ref=e29]: Providers
+      - link "Models" [ref=e30] [cursor=pointer]:
+        - /url: /models
+        - img [ref=e31]
+        - generic [ref=e34]: Models
+      - link "Logs" [ref=e35] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e36]
+        - generic [ref=e39]: Logs
+      - generic [ref=e40]: Settings
+      - link "Account" [ref=e41] [cursor=pointer]:
+        - /url: /account
+        - img [ref=e42]
+        - generic [ref=e45]: Account
+    - generic [ref=e47]:
+      - img [ref=e48]
+      - generic [ref=e52]: v1.0.0
+  - generic [ref=e53]:
+    - banner [ref=e54]:
+      - heading "Dashboard" [level=1] [ref=e56]
+      - generic [ref=e57]:
+        - button [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+        - button "EN" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+          - text: EN
+    - main [ref=e66]:
+      - generic [ref=e67]:
+        - alert [ref=e68]:
+          - img [ref=e69]
+          - img [ref=e72]
+        - generic [ref=e74]:
+          - generic [ref=e75]:
+            - heading "rcodex 管理面板" [level=1] [ref=e76]
+            - paragraph [ref=e77]: OpenAI 代理管理
+          - generic [ref=e78]:
+            - button "EN" [ref=e79] [cursor=pointer]:
+              - img [ref=e80]
+              - text: EN
+            - button "导出配置" [ref=e83] [cursor=pointer]:
+              - img [ref=e84]
+              - text: 导出配置
+            - button "导入配置" [ref=e87] [cursor=pointer]:
+              - img [ref=e88]
+              - text: 导入配置
+        - generic [ref=e91]:
+          - tablist [ref=e92]:
+            - tab "配置" [selected] [ref=e93] [cursor=pointer]
+            - tab "设置" [ref=e94] [cursor=pointer]
+            - tab "思考" [ref=e95] [cursor=pointer]
+            - tab "备份" [ref=e96] [cursor=pointer]
+            - tab "历史" [ref=e97] [cursor=pointer]
+            - tab "覆盖" [ref=e98] [cursor=pointer]
+          - tabpanel "配置" [ref=e99]:
+            - generic [ref=e100]:
+              - generic [ref=e101]:
+                - generic [ref=e102]:
+                  - heading "当前状态" [level=3] [ref=e103]
+                  - paragraph [ref=e104]: 当前 Codex 配置状态
+                - generic [ref=e105]:
+                  - button "导出" [ref=e106] [cursor=pointer]:
+                    - img [ref=e107]
+                    - text: 导出
+                  - button [ref=e110] [cursor=pointer]:
+                    - img [ref=e111]
+              - generic [ref=e116]:
+                - generic [ref=e117]:
+                  - generic [ref=e118]:
+                    - paragraph [ref=e119]: Codex 目录
+                    - generic [ref=e120]:
+                      - paragraph [ref=e121]: "-"
+                      - button "Edit" [ref=e122] [cursor=pointer]
+                    - generic [ref=e123]: default
+                  - generic [ref=e124]:
+                    - paragraph [ref=e125]: 认证所有者
+                    - generic [ref=e126]: 缺失
+                    - paragraph [ref=e127]: "-"
+                  - generic [ref=e128]:
+                    - paragraph [ref=e129]: 提供商
+                    - generic [ref=e130]: "-"
+                  - generic [ref=e131]:
+                    - paragraph [ref=e132]: 模型
+                    - generic [ref=e133]: "-"
+                - generic [ref=e134]:
+                  - generic [ref=e135]:
+                    - paragraph [ref=e136]: "Config TOML:"
+                    - generic [ref=e137]: not found
+                  - generic [ref=e138]:
+                    - paragraph [ref=e139]: "备份:"
+                    - generic [ref=e140]: "0"
+                  - generic [ref=e141]:
+                    - paragraph [ref=e142]: "Override:"
+                    - generic [ref=e143]: inactive
+            - generic [ref=e144]:
+              - generic [ref=e145]:
+                - heading "选择提供商" [level=3] [ref=e146]
+                - paragraph [ref=e147]: 选择要应用的提供商和模型
+              - generic [ref=e148]:
+                - button "测试全部" [ref=e150] [cursor=pointer]:
+                  - img [ref=e151]
+                  - text: 测试全部
+                - generic [ref=e153]:
+                  - generic [ref=e154]:
+                    - generic [ref=e155]: undefined
+                    - generic [ref=e156]: undefined
+                  - table [ref=e158]:
+                    - rowgroup [ref=e159]:
+                      - row "Model Source Context Status Actions" [ref=e160]:
+                        - columnheader "Model" [ref=e161]
+                        - columnheader "Source" [ref=e162]
+                        - columnheader "Context" [ref=e163]
+                        - columnheader "Status" [ref=e164]
+                        - columnheader "Actions" [ref=e165]
+                    - rowgroup [ref=e166]:
+                      - row "builtin — No Key Select Override" [ref=e167]:
+                        - cell [ref=e168]:
+                          - generic:
+                            - code
+                        - cell "builtin" [ref=e169]:
+                          - generic [ref=e170]: builtin
+                        - cell "—" [ref=e171]
+                        - cell "No Key" [ref=e172]:
+                          - generic [ref=e173]: No Key
+                        - cell "Select Override" [ref=e174]:
+                          - generic [ref=e175]:
+                            - button "No API key configured" [disabled]:
+                              - img
+                            - button "Select" [disabled]
+                            - button "Override" [ref=e176] [cursor=pointer]
+                - generic [ref=e177]:
+                  - button "应用 Codex" [disabled]

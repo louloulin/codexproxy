@@ -1,0 +1,48 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]: rcodex
+      - generic [ref=e9]: admin
+    - navigation [ref=e10]:
+      - generic [ref=e11]: Overview
+      - link "Dashboard" [ref=e12] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e13]
+        - generic [ref=e18]: Dashboard
+      - generic [ref=e19]: Management
+      - link "Codex" [ref=e20] [cursor=pointer]:
+        - /url: /codex
+        - img [ref=e21]
+        - generic [ref=e24]: Codex
+      - link "Providers" [ref=e25] [cursor=pointer]:
+        - /url: /providers
+        - img [ref=e26]
+        - generic [ref=e29]: Providers
+      - link "Models" [ref=e30] [cursor=pointer]:
+        - /url: /models
+        - img [ref=e31]
+        - generic [ref=e34]: Models
+      - link "Logs" [ref=e35] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e36]
+        - generic [ref=e39]: Logs
+      - generic [ref=e40]: Settings
+      - link "Account" [ref=e41] [cursor=pointer]:
+        - /url: /account
+        - img [ref=e42]
+        - generic [ref=e45]: Account
+    - generic [ref=e47]:
+      - img [ref=e48]
+      - generic [ref=e52]: v1.0.0
+  - generic [ref=e53]:
+    - banner [ref=e54]:
+      - heading "Dashboard" [level=1] [ref=e56]
+      - generic [ref=e57]:
+        - button [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+        - button "EN" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+          - text: EN
+    - main [ref=e66]:
+      - img [ref=e68]

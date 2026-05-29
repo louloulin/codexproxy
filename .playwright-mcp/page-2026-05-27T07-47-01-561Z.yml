@@ -1,0 +1,89 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]: rcodex
+      - generic [ref=e9]: admin
+    - navigation [ref=e10]:
+      - generic [ref=e11]: Overview
+      - link "Dashboard" [ref=e12] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e13]
+        - generic [ref=e18]: Dashboard
+      - generic [ref=e19]: Management
+      - link "Codex" [ref=e20] [cursor=pointer]:
+        - /url: /codex
+        - img [ref=e21]
+        - generic [ref=e24]: Codex
+      - link "Providers" [ref=e25] [cursor=pointer]:
+        - /url: /providers
+        - img [ref=e26]
+        - generic [ref=e29]: Providers
+      - link "Models" [ref=e30] [cursor=pointer]:
+        - /url: /models
+        - img [ref=e31]
+        - generic [ref=e34]: Models
+      - link "Logs" [ref=e35] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e36]
+        - generic [ref=e39]: Logs
+      - generic [ref=e40]: Settings
+      - link "Account" [ref=e41] [cursor=pointer]:
+        - /url: /account
+        - img [ref=e42]
+        - generic [ref=e45]: Account
+    - generic [ref=e47]:
+      - img [ref=e48]
+      - generic [ref=e52]: v1.0.0
+  - generic [ref=e53]:
+    - banner [ref=e54]:
+      - heading "Dashboard" [level=1] [ref=e56]
+      - generic [ref=e57]:
+        - button [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+        - button "EN" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+          - text: EN
+    - main [ref=e66]:
+      - generic [ref=e67]:
+        - generic [ref=e68]:
+          - heading "Logs" [level=1] [ref=e69]
+          - paragraph [ref=e70]: View and analyze API request logs
+        - generic [ref=e73]:
+          - generic [ref=e74]:
+            - generic [ref=e75]: Provider
+            - combobox [ref=e76] [cursor=pointer]:
+              - generic: All providers
+              - img [ref=e77]
+          - generic [ref=e79]:
+            - generic [ref=e80]: Model
+            - textbox "Filter by model..." [ref=e81]
+          - generic [ref=e82]:
+            - button "all" [ref=e83] [cursor=pointer]
+            - button "ok" [ref=e84] [cursor=pointer]
+            - button "error" [ref=e85] [cursor=pointer]
+          - generic [ref=e86]:
+            - button "Refresh" [ref=e87] [cursor=pointer]:
+              - img [ref=e88]
+              - text: Refresh
+            - button "Export CSV" [disabled]:
+              - img
+              - text: Export CSV
+            - button "Clear Old" [ref=e93] [cursor=pointer]:
+              - img [ref=e94]
+              - text: Clear Old
+        - table [ref=e100]:
+          - rowgroup [ref=e101]:
+            - row "Time Provider Model Endpoint Status Tokens Duration Error" [ref=e102]:
+              - columnheader [ref=e103]
+              - columnheader "Time" [ref=e104]
+              - columnheader "Provider" [ref=e105]
+              - columnheader "Model" [ref=e106]
+              - columnheader "Endpoint" [ref=e107]
+              - columnheader "Status" [ref=e108]
+              - columnheader "Tokens" [ref=e109]
+              - columnheader "Duration" [ref=e110]
+              - columnheader "Error" [ref=e111]
+          - rowgroup [ref=e112]:
+            - row "No logs found" [ref=e113]:
+              - cell "No logs found" [ref=e114]

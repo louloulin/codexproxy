@@ -20,7 +20,7 @@ pub mod utils;
 
 // Re-export types and handlers for external use
 pub use utils::AppState;
-pub use chat::{chat_completions, zhipu_chat_completions};
+pub use chat::{chat_completions, zhipu_chat_completions, minimax_chat_completions, models};
 pub use responses::responses;
 
 /// Health check endpoint

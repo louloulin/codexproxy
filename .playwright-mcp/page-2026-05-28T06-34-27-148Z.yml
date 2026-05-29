@@ -1,0 +1,6 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: ⚠️
+    - heading "Something went wrong" [level=2] [ref=e7]
+  - paragraph [ref=e8]: s.points is not iterable
+  - button "Reload page" [ref=e9] [cursor=pointer]

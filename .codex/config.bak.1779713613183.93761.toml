@@ -1,0 +1,5 @@
+[provider]
+model_provider = "CodexPlusPlus"
+model = "MiniMax-M2.7"
+base_url = "http://127.0.0.1:8080/v1"
+requires_openai_auth = true

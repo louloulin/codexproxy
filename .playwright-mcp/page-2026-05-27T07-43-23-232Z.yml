@@ -1,0 +1,102 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]: rcodex
+      - generic [ref=e9]: admin
+    - navigation [ref=e10]:
+      - generic [ref=e11]: Overview
+      - link "Dashboard" [ref=e12] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e13]
+        - generic [ref=e18]: Dashboard
+      - generic [ref=e19]: Management
+      - link "Codex" [ref=e20] [cursor=pointer]:
+        - /url: /codex
+        - img [ref=e21]
+        - generic [ref=e24]: Codex
+      - link "Providers" [ref=e25] [cursor=pointer]:
+        - /url: /providers
+        - img [ref=e26]
+        - generic [ref=e29]: Providers
+      - link "Models" [ref=e30] [cursor=pointer]:
+        - /url: /models
+        - img [ref=e31]
+        - generic [ref=e34]: Models
+      - link "Logs" [ref=e35] [cursor=pointer]:
+        - /url: /logs
+        - img [ref=e36]
+        - generic [ref=e39]: Logs
+      - generic [ref=e40]: Settings
+      - link "Account" [ref=e41] [cursor=pointer]:
+        - /url: /account
+        - img [ref=e42]
+        - generic [ref=e45]: Account
+    - generic [ref=e47]:
+      - img [ref=e48]
+      - generic [ref=e52]: v1.0.0
+  - generic [ref=e53]:
+    - banner [ref=e54]:
+      - heading "Dashboard" [level=1] [ref=e56]
+      - generic [ref=e57]:
+        - button [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+        - button "EN" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+          - text: EN
+    - main [ref=e66]:
+      - generic [ref=e67]:
+        - generic [ref=e68]:
+          - heading "Providers" [level=1] [ref=e69]
+          - paragraph [ref=e70]: Configure API providers and authentication
+        - generic [ref=e71]:
+          - paragraph [ref=e72]: Configure the API providers that rcodex can use as upstream backends.
+          - generic [ref=e73]:
+            - button "Raw JSON" [ref=e74] [cursor=pointer]:
+              - img [ref=e75]
+              - text: Raw JSON
+            - button "Add Provider" [ref=e78] [cursor=pointer]:
+              - img [ref=e79]
+              - text: Add Provider
+        - table [ref=e83]:
+          - rowgroup [ref=e84]:
+            - row "Provider Endpoint Auth Actions" [ref=e85]:
+              - columnheader "Provider" [ref=e86]
+              - columnheader "Endpoint" [ref=e87]
+              - columnheader "Auth" [ref=e88]
+              - columnheader "Actions" [ref=e89]
+          - rowgroup [ref=e90]:
+            - row "Zhipu AI API key configured https://open.bigmodel.cn/api/coding/paas/v4 Bearer Test connection" [ref=e91]:
+              - cell "Zhipu AI API key configured" [ref=e92]:
+                - generic [ref=e93]:
+                  - generic [ref=e94]: Zhipu AI
+                  - img "API key configured" [ref=e95]
+              - cell "https://open.bigmodel.cn/api/coding/paas/v4" [ref=e97]:
+                - code [ref=e98]: https://open.bigmodel.cn/api/coding/paas/v4
+              - cell "Bearer" [ref=e99]:
+                - generic [ref=e100]: Bearer
+              - cell "Test connection" [ref=e101]:
+                - generic [ref=e102]:
+                  - button "Test connection" [ref=e103] [cursor=pointer]:
+                    - img [ref=e104]
+                  - button [ref=e106] [cursor=pointer]:
+                    - img [ref=e107]
+                  - button [ref=e110] [cursor=pointer]:
+                    - img [ref=e111]
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - heading "Quick Presets" [level=3] [ref=e116]
+            - paragraph [ref=e117]: Click to quick-fill provider settings
+          - generic [ref=e119]:
+            - button "🤖 OpenAI" [ref=e120] [cursor=pointer]:
+              - generic [ref=e121]: 🤖
+              - generic [ref=e122]: OpenAI
+            - button "🧠 Anthropic" [ref=e123] [cursor=pointer]:
+              - generic [ref=e124]: 🧠
+              - generic [ref=e125]: Anthropic
+            - button "🔮 DeepSeek" [ref=e126] [cursor=pointer]:
+              - generic [ref=e127]: 🔮
+              - generic [ref=e128]: DeepSeek
+            - button "🌐 Google AI" [ref=e129] [cursor=pointer]:
+              - generic [ref=e130]: 🌐
+              - generic [ref=e131]: Google AI

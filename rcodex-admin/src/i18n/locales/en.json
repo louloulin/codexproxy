@@ -1,0 +1,157 @@
+{
+  "app": {
+    "title": "rcodex Admin",
+    "subtitle": "OpenAI Proxy Management",
+    "modesInfo": {
+      "applyFile": "Apply changes to config.toml",
+      "runtimeOverride": "Runtime override"
+    },
+    "help": "Help"
+  },
+  "nav": {
+    "config": "Configuration",
+    "setup": "Setup",
+    "thinking": "Thinking",
+    "backups": "Backups",
+    "history": "History",
+    "override": "Override"
+  },
+  "codexState": {
+    "title": "Current State",
+    "description": "Current Codex configuration status",
+    "codexDir": "Codex Directory",
+    "authOwner": "Auth Owner",
+    "provider": "Provider",
+    "model": "Model",
+    "configToml": "Config TOML",
+    "backups": "Backups",
+    "export": "Export",
+    "refresh": "Refresh"
+  },
+  "provider": {
+    "title": "Provider Selection",
+    "description": "Select a provider and model to apply",
+    "selectProvider": "Select provider",
+    "selectModel": "Select model",
+    "targetUrl": "Target URL",
+    "testConnection": "Test Connection",
+    "testAll": "Test All",
+    "testingAll": "Testing...",
+    "applyCodex": "Apply Codex",
+    "success": "Codex applied successfully!",
+    "error": "Failed to apply Codex",
+    "externalWarning": "You are using external/custom providers. Ensure you trust these providers with your API credentials.",
+    "externalProvider": "External Provider"
+  },
+  "probe": {
+    "success": "Connection Successful",
+    "failed": "Connection Failed",
+    "latency": "Latency"
+  },
+  "backup": {
+    "title": "Backup History",
+    "description": "Restore or delete previous configurations",
+    "timestamp": "Timestamp",
+    "time": "Time",
+    "type": "Type",
+    "providerModel": "Provider/Model",
+    "actions": "Actions",
+    "restore": "Restore",
+    "delete": "Delete",
+    "preserved": "preserved",
+    "snapshot": "snapshot",
+    "noBackups": "No backups yet",
+    "noBackupsHint": "Apply a configuration to create a backup",
+    "confirmDelete": "Delete this backup?",
+    "confirmDeletePreserved": "Delete this preserved backup?"
+  },
+  "history": {
+    "title": "Codex History",
+    "description": "Audit trail of configuration changes",
+    "time": "Time",
+    "kind": "Kind",
+    "provider": "Provider",
+    "model": "Model",
+    "note": "Note",
+    "actions": "Actions",
+    "noHistory": "No history entries yet",
+    "noHistoryHint": "Apply or restore configurations to see history",
+    "download": "Download bundle"
+  },
+  "thinking": {
+    "title": "Thinking Mode",
+    "description": "Configure chain-of-thought reasoning behavior",
+    "enableThinking": "Enable Thinking",
+    "enableThinkingDesc": "Allow models to use chain-of-thought reasoning",
+    "forceHighEffort": "Force High Effort",
+    "forceHighEffortDesc": "Always use high reasoning effort when available",
+    "statusOn": "Enabled",
+    "statusOff": "Disabled"
+  },
+  "override": {
+    "title": "Runtime Override",
+    "description": "Override provider/model at runtime (temporary)",
+    "current": "Current Override",
+    "noOverride": "No override active (using config)",
+    "clear": "Clear Override",
+    "set": "Set Override",
+    "providerPlaceholder": "e.g., openai",
+    "modelPlaceholder": "e.g., gpt-4"
+  },
+  "setup": {
+    "title": "Setup Instructions",
+    "description": "How to configure API keys for Codex",
+    "availableProviders": "Available Providers",
+    "environmentVariable": "Set Environment Variable",
+    "authJson": "auth.json",
+    "configToml": "config.toml",
+    "modelInfo": "Model Information",
+    "context": "Context",
+    "maxOutput": "Max Output",
+    "tokens": "tokens"
+  },
+  "import": {
+    "title": "Import Configuration",
+    "guideTitle": "Import Codex Configuration",
+    "guideDesc": "This will overwrite your current auth.json and config.toml files.",
+    "warning": "⚠️ Warning: This will overwrite your existing configuration files.",
+    "authJson": "auth.json Content",
+    "authJsonPlaceholder": "Paste your auth.json content here...",
+    "configToml": "config.toml Content",
+    "configTomlPlaceholder": "Paste your config.toml content here...",
+    "providerId": "Provider ID (optional)",
+    "modelId": "Model ID (optional)",
+    "note": "Note (optional)",
+    "cancel": "Cancel",
+    "import": "Import",
+    "importing": "Importing..."
+  },
+  "export": {
+    "title": "Export Configuration",
+    "desc": "Download your current Codex configuration files",
+    "downloadAuth": "Download auth.json",
+    "downloadConfig": "Download config.toml",
+    "downloadScript": "Download Setup Script",
+    "posix": "POSIX (Linux/macOS)",
+    "powershell": "PowerShell (Windows)",
+    "warning": "⚠️ These files contain sensitive credentials. Store them securely.",
+    "close": "Close"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "copy": "Copy",
+    "copied": "Copied!"
+  },
+  "auth": {
+    "mimo2codex": "mimo2codex",
+    "external": "external",
+    "missing": "missing"
+  }
+}

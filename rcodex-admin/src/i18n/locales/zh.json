@@ -1,0 +1,157 @@
+{
+  "app": {
+    "title": "rcodex 管理面板",
+    "subtitle": "OpenAI 代理管理",
+    "modesInfo": {
+      "applyFile": "应用更改到 config.toml",
+      "runtimeOverride": "运行时覆盖"
+    },
+    "help": "帮助"
+  },
+  "nav": {
+    "config": "配置",
+    "setup": "设置",
+    "thinking": "思考",
+    "backups": "备份",
+    "history": "历史",
+    "override": "覆盖"
+  },
+  "codexState": {
+    "title": "当前状态",
+    "description": "当前 Codex 配置状态",
+    "codexDir": "Codex 目录",
+    "authOwner": "认证所有者",
+    "provider": "提供商",
+    "model": "模型",
+    "configToml": "Config TOML",
+    "backups": "备份",
+    "export": "导出",
+    "refresh": "刷新"
+  },
+  "provider": {
+    "title": "选择提供商",
+    "description": "选择要应用的提供商和模型",
+    "selectProvider": "选择提供商",
+    "selectModel": "选择模型",
+    "targetUrl": "目标 URL",
+    "testConnection": "测试连接",
+    "testAll": "测试全部",
+    "testingAll": "测试中...",
+    "applyCodex": "应用 Codex",
+    "success": "Codex 应用成功！",
+    "error": "应用 Codex 失败",
+    "externalWarning": "您正在使用外部/自定义提供商。请确保您信任这些提供商处理您的 API 凭证。",
+    "externalProvider": "外部提供商"
+  },
+  "probe": {
+    "success": "连接成功",
+    "failed": "连接失败",
+    "latency": "延迟"
+  },
+  "backup": {
+    "title": "备份历史",
+    "description": "恢复或删除之前的配置",
+    "timestamp": "时间戳",
+    "time": "时间",
+    "type": "类型",
+    "providerModel": "提供商/模型",
+    "actions": "操作",
+    "restore": "恢复",
+    "delete": "删除",
+    "preserved": "已保留",
+    "snapshot": "快照",
+    "noBackups": "暂无备份",
+    "noBackupsHint": "应用配置来创建备份",
+    "confirmDelete": "删除此备份？",
+    "confirmDeletePreserved": "删除此保留备份？"
+  },
+  "history": {
+    "title": "Codex 历史",
+    "description": "配置变更审计追踪",
+    "time": "时间",
+    "kind": "类型",
+    "provider": "提供商",
+    "model": "模型",
+    "note": "备注",
+    "actions": "操作",
+    "noHistory": "暂无历史记录",
+    "noHistoryHint": "应用或恢复配置来查看历史",
+    "download": "下载配置包"
+  },
+  "thinking": {
+    "title": "思考模式",
+    "description": "配置链式思维推理行为",
+    "enableThinking": "启用思考",
+    "enableThinkingDesc": "允许模型使用链式思维推理",
+    "forceHighEffort": "强制高强度",
+    "forceHighEffortDesc": "在可用时始终使用高推理强度",
+    "statusOn": "已启用",
+    "statusOff": "已禁用"
+  },
+  "override": {
+    "title": "运行时覆盖",
+    "description": "在运行时覆盖提供商/模型（临时）",
+    "current": "当前覆盖",
+    "noOverride": "无覆盖（使用配置）",
+    "clear": "清除覆盖",
+    "set": "设置覆盖",
+    "providerPlaceholder": "例如 openai",
+    "modelPlaceholder": "例如 gpt-4"
+  },
+  "setup": {
+    "title": "设置说明",
+    "description": "如何为 Codex 配置 API 密钥",
+    "availableProviders": "可用提供商",
+    "environmentVariable": "设置环境变量",
+    "authJson": "auth.json",
+    "configToml": "config.toml",
+    "modelInfo": "模型信息",
+    "context": "上下文",
+    "maxOutput": "最大输出",
+    "tokens": "tokens"
+  },
+  "import": {
+    "title": "导入配置",
+    "guideTitle": "导入 Codex 配置",
+    "guideDesc": "这将覆盖您当前的 auth.json 和 config.toml 文件。",
+    "warning": "⚠️ 警告：这将覆盖您现有的配置文件。",
+    "authJson": "auth.json 内容",
+    "authJsonPlaceholder": "在此粘贴您的 auth.json 内容...",
+    "configToml": "config.toml 内容",
+    "configTomlPlaceholder": "在此粘贴您的 config.toml 内容...",
+    "providerId": "提供商 ID（可选）",
+    "modelId": "模型 ID（可选）",
+    "note": "备注（可选）",
+    "cancel": "取消",
+    "import": "导入",
+    "importing": "导入中..."
+  },
+  "export": {
+    "title": "导出配置",
+    "desc": "下载您当前的 Codex 配置文件",
+    "downloadAuth": "下载 auth.json",
+    "downloadConfig": "下载 config.toml",
+    "downloadScript": "下载设置脚本",
+    "posix": "POSIX (Linux/macOS)",
+    "powershell": "PowerShell (Windows)",
+    "warning": "⚠️ 这些文件包含敏感凭证。请安全存储。",
+    "close": "关闭"
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "cancel": "取消",
+    "confirm": "确认",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "copy": "复制",
+    "copied": "已复制！"
+  },
+  "auth": {
+    "mimo2codex": "mimo2codex",
+    "external": "外部",
+    "missing": "缺失"
+  }
+}

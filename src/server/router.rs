@@ -93,10 +93,16 @@ pub fn create_router(
         .route("/health", get(handlers::health_check))
         .route("/v1/chat/completions", post(handlers::chat_completions))
         .route("/v1/responses", post(handlers::responses))
+        .route("/v1/models", get(handlers::models))
         .route("/responses", post(handlers::responses))
         .route(
             "/v1/providers/zhipu/chat/completions",
             post(handlers::zhipu_chat_completions),
+        )
+        // MiniMax API - uses same endpoint as OpenAI
+        .route(
+            "/v1/text/chatcompletion_v2",
+            post(handlers::minimax_chat_completions),
         )
         // Admin routes
         .route("/admin", get(crate::handlers::admin::admin_dashboard))

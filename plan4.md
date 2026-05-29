@@ -964,7 +964,214 @@ git commit -m "test: add codex cli proxy regression coverage"
 
 ---
 
-## 八、验收标准
+## 十、rcodex vs mimo2codex 功能对比分析 (v2.8.x)
+
+> **更新时间:** 2026-05-28
+> **目标:** 识别当前代码中的 mock 部分，制定完善计划
+
+### 10.1 前端功能对比
+
+| 功能模块 | rcodex (rcodex-admin) | mimo2codex | 状态 | 说明 |
+|---------|---------------------|------------|------|------|
+| **Providers页面** | ✅ 已实现 | ✅ 已实现 | 完成 | 支持测试连接、可展开行显示模型 |
+| **Codex页面** | ⚠️ 部分实现 | ✅ 完整 | 待完成 | Override按钮功能未实现 |
+| **Dashboard页面** | ✅ 已实现 | ✅ 已实现 | 完成 | 统计信息、请求趋势 |
+| **Logs页面** | ✅ 已实现 | ✅ 已实现 | 完成 | 日志查询、详情 |
+| **Models页面** | ✅ 已实现 | ✅ 已实现 | 完成 | 模型管理 |
+| **Account页面** | ✅ 已实现 | ✅ 已实现 | 完成 | API keys、OAuth |
+| **Thinking控制** | ✅ 已实现 | ✅ 已实现 | 完成 | 运行时控制 |
+| **历史记录** | ⚠️ 返回空数组 | ✅ 完整 | 待完成 | `get_codex_history_handler` 返回空 |
+| **Active Override** | ⚠️ 未持久化 | ✅ 完整 | 待完成 | 仅返回null，无实际存储 |
+| **Provider Health** | ✅ 已实现 | ✅ 已实现 | 完成 | 健康检查 |
+| **导入/导出** | ✅ 已实现 | ✅ 已实现 | 完成 | 配置迁移 |
+
+### 10.2 后端API对比
+
+| API端点 | rcodex | mimo2codex | 状态 | 问题 |
+|---------|--------|-----------|------|------|
+| `GET /admin/api/stats` | ✅ 返回1个provider | ✅ 动态count | 待修复 | total_providers硬编码为1 |
+| `GET /admin/api/codex-state` | ✅ 已实现 | ✅ 已实现 | 完成 | |
+| `GET /admin/api/codex-targets` | ✅ 已实现 | ✅ 已实现 | 完成 | |
+| `POST /admin/api/probe` | ✅ 真实请求 | ✅ 真实请求 | 完成 | MiniMax返回真实错误 |
+| `POST /admin/api/codex-apply` | ✅ 已实现 | ✅ 已实现 | 完成 | |
+| `POST /admin/api/codex-restore` | ✅ 已实现 | ✅ 已实现 | 完成 | |
+| `GET /admin/api/active-override` | ⚠️ 返回null | ✅ 完整 | 待完成 | 未读取实际override |
+| `PUT /admin/api/active-override` | ⚠️ 仅返回 | ✅ 持久化 | 待完成 | 未保存到存储 |
+| `DELETE /admin/api/active-override` | ⚠️ 仅返回 | ✅ 清除 | 待完成 | 未清除存储 |
+| `GET /admin/api/codex-history` | ⚠️ 返回空数组 | ✅ 完整 | 待完成 | 需要实现DB查询 |
+| `GET /admin/api/codex-history/:id` | ⚠️ 返回错误 | ✅ 完整 | 待完成 | 需要实现DB查询 |
+| `GET /admin/api/thinking` | ✅ 已实现 | ✅ 已实现 | 完成 | |
+| `PUT /admin/api/thinking` | ✅ 已实现 | ✅ 已实现 | 完成 | |
+
+### 10.3 Rust后端Mock/待实现功能清单
+
+#### 高优先级 (必须实现)
+
+1. **`get_active_override_handler`** (line 118-120)
+   - 当前: 直接返回 `{ override: null }`
+   - 需要: 从DB读取当前active override
+   - 影响: Override面板无法显示当前状态
+
+2. **`put_active_override_handler`** (line 129-137)
+   - 当前: 仅返回成功响应，不保存
+   - 需要: 保存override到存储
+   - 影响: Runtime override无法持久化
+
+3. **`delete_active_override_handler`** (line 140-147)
+   - 当前: 仅返回成功响应，不删除
+   - 需要: 从存储删除override
+   - 影响: 无法清除runtime override
+
+4. **`get_codex_history_handler`** (line 154-157)
+   - 当前: 返回空数组 `Vec::new()`
+   - 需要: 从DB查询历史记录
+   - 影响: History页面显示为空
+
+5. **`get_codex_history_by_id_handler`** (line 160-164)
+   - 当前: 返回错误信息
+   - 需要: 从DB查询单条记录
+   - 影响: 历史详情无法查看
+
+6. **`total_providers` in `api_stats`** (line 137)
+   - 当前: 返回硬编码值1
+   - 需要: 动态计算所有provider数量
+   - 影响: Dashboard统计数据不准确
+
+#### 中优先级 (应该实现)
+
+7. **前端Override按钮** (CodexPage.tsx line 385-392)
+   - 当前: `// TODO: Implement override` + console.log
+   - 需要: 调用 `api.codex.setOverride()`
+   - 影响: 用户无法设置runtime override
+
+8. **CodexStateCard中的Override状态** (line 181-183)
+   - 当前: 硬编码显示 `inactive`
+   - 需要: 显示实际override状态
+   - 影响: 用户看不到override是否激活
+
+### 10.4 测试用例设计
+
+#### TC1: Providers页面测试模型连接
+
+```typescript
+// 目标: 验证Providers页面的模型探测功能
+describe('ProvidersPage - Model Probe', () => {
+  it('should test MiniMax connection', async () => {
+    // 1. 访问 /providers 页面
+    // 2. 点击MiniMax模型的测试按钮
+    // 3. 验证返回真实的API响应
+    // 4. 确认错误信息正确显示（如"余额不足"）
+  });
+
+  it('should show all configured providers', async () => {
+    // 1. 验证OpenAI、Zhipu、MiniMax都显示
+    // 2. 验证每个provider的hasKey状态正确
+  });
+
+  it('should expand to show models', async () => {
+    // 1. 点击展开按钮
+    // 2. 验证模型列表显示
+    // 3. 验证context_window信息显示
+  });
+});
+```
+
+#### TC2: Codex Override功能测试
+
+```typescript
+// 目标: 验证runtime override功能
+describe('CodexPage - Runtime Override', () => {
+  it('should set override via button', async () => {
+    // 1. 在ProviderSelector中点击Override按钮
+    // 2. 验证PUT /admin/api/active-override被调用
+    // 3. 验证Override面板显示正确状态
+    // 4. 验证CodexStateCard显示override active
+  });
+
+  it('should display current override state', async () => {
+    // 1. 先设置一个override
+    // 2. 刷新页面
+    // 3. 验证override状态被正确读取和显示
+  });
+
+  it('should clear override', async () => {
+    // 1. 已有active override
+    // 2. 点击Clear Override按钮
+    // 3. 验证DELETE /admin/api/active-override被调用
+    // 4. 验证override状态被清除
+  });
+});
+```
+
+#### TC3: Codex History测试
+
+```typescript
+// 目标: 验证历史记录功能
+describe('CodexPage - History', () => {
+  it('should display history entries', async () => {
+    // 1. 执行apply操作创建历史
+    // 2. 访问History标签页
+    // 3. 验证历史记录正确显示
+    // 4. 验证时间戳格式正确
+  });
+
+  it('should allow restore from history', async () => {
+    // 1. 点击历史记录的restore按钮
+    // 2. 验证POST /admin/api/codex-restore被调用
+    // 3. 验证状态更新成功
+  });
+});
+```
+
+#### TC4: Backend API测试
+
+```typescript
+// 目标: 验证后端API正确性
+describe('Backend API', () => {
+  it('should return correct provider count', async () => {
+    const stats = await api.stats.get('24h');
+    expect(stats.total_providers).toBeGreaterThan(1);
+  });
+
+  it('should persist override', async () => {
+    await api.codex.setOverride('minimax', 'MiniMax-M2');
+    const override = await api.codex.activeOverride();
+    expect(override.data?.providerId).toBe('minimax');
+  });
+
+  it('should query history from DB', async () => {
+    const history = await api.codex.history();
+    expect(Array.isArray(history.data)).toBe(true);
+  });
+});
+```
+
+### 10.5 实施计划
+
+#### Phase 1: 后端修复 (高优先级)
+
+- [ ] **Step 1.1**: 实现 `get_active_override_handler` 从DB读取
+- [ ] **Step 1.2**: 实现 `put_active_override_handler` 保存到DB
+- [ ] **Step 1.3**: 实现 `delete_active_override_handler` 从DB删除
+- [ ] **Step 1.4**: 实现 `get_codex_history_handler` 从DB查询
+- [ ] **Step 1.5**: 实现 `get_codex_history_by_id_handler` 从DB查询
+- [ ] **Step 1.6**: 修复 `api_stats` 动态计算provider数量
+
+#### Phase 2: 前端完善
+
+- [ ] **Step 2.1**: 实现Override按钮调用API
+- [ ] **Step 2.2**: CodexStateCard显示真实override状态
+- [ ] **Step 2.3**: History页面正确显示历史记录
+
+#### Phase 3: 验证测试
+
+- [ ] **Step 3.1**: 运行前端测试用例 TC1-TC4
+- [ ] **Step 3.2**: 使用curl测试后端API
+- [ ] **Step 3.3**: 端到端验证整个流程
+
+---
+
+## 十一、验收标准
 
 完成本计划后，系统至少应达到以下标准：
 

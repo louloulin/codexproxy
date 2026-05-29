@@ -126,6 +126,7 @@ pub struct AppState {
     pub config: Config,
     pub openai_provider: Option<ProviderType>,
     pub zhipu_provider: Option<ProviderType>,
+    pub minimax_provider: Option<ProviderType>,
     pub auth_state: Option<std::sync::Arc<crate::auth::AuthState>>,
     pub request_repo: Option<std::sync::Arc<crate::db::repository::RequestRepository>>,
     pub provider_registry: Option<std::sync::Arc<std::sync::Mutex<crate::providers::ProviderRegistry>>>,
@@ -140,7 +141,7 @@ impl AppState {
 
     /// Create new AppState with optional auth state
     pub fn new_with_auth(config: Config, auth_state: Option<std::sync::Arc<crate::auth::AuthState>>) -> Self {
-        use crate::providers::{OpenAIProvider, ZhipuProvider};
+        use crate::providers::{OpenAIProvider, ZhipuProvider, MiniMaxProvider};
 
         let openai_provider = config
             .providers
@@ -155,10 +156,21 @@ impl AppState {
             None
         };
 
+        let minimax_provider = if let Some(ref minimax_config) = config.providers.minimax {
+            if !minimax_config.api_key.is_empty() {
+                Some(Arc::new(MiniMaxProvider::new(minimax_config.clone())) as ProviderType)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Self {
             config,
             openai_provider,
             zhipu_provider,
+            minimax_provider,
             auth_state,
             request_repo: None,
             provider_registry: None,
@@ -199,6 +211,10 @@ impl AppState {
                 .zhipu_provider
                 .clone()
                 .ok_or_else(|| Error::Provider("Zhipu provider not configured".to_string())),
+            "minimax" => self
+                .minimax_provider
+                .clone()
+                .ok_or_else(|| Error::Provider("MiniMax provider not configured".to_string())),
             _ => Err(Error::Provider(format!("Unknown provider: {}", name))),
         }
     }
@@ -214,6 +230,9 @@ impl AppState {
         if self.zhipu_provider.is_some() {
             providers.push(ProviderInfo { id: "zhipu".into(), name: "Zhipu AI".into(), source: "config".into(), model_count: 3 });
         }
+        if self.minimax_provider.is_some() {
+            providers.push(ProviderInfo { id: "minimax".into(), name: "MiniMax".into(), source: "config".into(), model_count: 4 });
+        }
 
         // Add registry providers (dynamic)
         if let Some(ref registry) = self.provider_registry {
@@ -227,6 +246,66 @@ impl AppState {
         }
 
         providers
+    }
+}
+
+/// Model info in OpenAI format
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub object: String,
+    pub owned_by: String,
+}
+
+impl AppState {
+    /// List all available models from all configured providers
+    /// Returns models in OpenAI format
+    pub fn list_models(&self) -> Vec<ModelInfo> {
+        let mut models = Vec::new();
+
+        // OpenAI models
+        if self.openai_provider.is_some() {
+            let openai_models = vec![
+                ModelInfo { id: "gpt-4o".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "gpt-4o-mini".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "gpt-4-turbo".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "gpt-3.5-turbo".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "o1".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "o1-mini".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "o1-preview".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "o3".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "o3-mini".into(), object: "model".into(), owned_by: "openai".into() },
+                ModelInfo { id: "gpt-4.5".into(), object: "model".into(), owned_by: "openai".into() },
+            ];
+            models.extend(openai_models);
+        }
+
+        // Zhipu models
+        if self.zhipu_provider.is_some() {
+            let zhipu_models = vec![
+                ModelInfo { id: "glm-4".into(), object: "model".into(), owned_by: "zhipu".into() },
+                ModelInfo { id: "glm-4-plus".into(), object: "model".into(), owned_by: "zhipu".into() },
+                ModelInfo { id: "glm-4v".into(), object: "model".into(), owned_by: "zhipu".into() },
+                ModelInfo { id: "glm-z1".into(), object: "model".into(), owned_by: "zhipu".into() },
+                ModelInfo { id: "glm-z1c".into(), object: "model".into(), owned_by: "zhipu".into() },
+                ModelInfo { id: "glm-z1r".into(), object: "model".into(), owned_by: "zhipu".into() },
+                ModelInfo { id: "glm-3".into(), object: "model".into(), owned_by: "zhipu".into() },
+            ];
+            models.extend(zhipu_models);
+        }
+
+        // MiniMax models
+        if self.minimax_provider.is_some() {
+            let minimax_models = vec![
+                ModelInfo { id: "MiniMax-Text-01".into(), object: "model".into(), owned_by: "minimax".into() },
+                ModelInfo { id: "abab6.5s-chat".into(), object: "model".into(), owned_by: "minimax".into() },
+                ModelInfo { id: "abab6.5g-chat".into(), object: "model".into(), owned_by: "minimax".into() },
+                ModelInfo { id: "abab5.5-chat".into(), object: "model".into(), owned_by: "minimax".into() },
+            ];
+            models.extend(minimax_models);
+        }
+
+        models
     }
 }
 
@@ -272,7 +351,12 @@ mod tests {
                     default_model: "glm-4".to_string(),
                     timeout: 60,
                 },
-                minimax: None,
+                minimax: Some(ProviderConfig {
+                    api_key: "test-key".to_string(),
+                    base_url: "https://api.minimaxi.com/v1".to_string(),
+                    default_model: "MiniMax-Text-01".to_string(),
+                    timeout: 120,
+                }),
             },
             routing: RoutingConfig {
                 default: "openai".to_string(),
@@ -294,6 +378,7 @@ mod tests {
 
         assert!(state.openai_provider.is_some());
         assert!(state.zhipu_provider.is_some());
+        assert!(state.minimax_provider.is_some());
     }
 
     #[test]
@@ -315,6 +400,9 @@ mod tests {
 
         let zhipu = state.get_provider_by_name("zhipu");
         assert!(zhipu.is_ok());
+
+        let minimax = state.get_provider_by_name("minimax");
+        assert!(minimax.is_ok());
 
         let unknown = state.get_provider_by_name("unknown");
         assert!(unknown.is_err());

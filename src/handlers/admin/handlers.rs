@@ -105,6 +105,9 @@ pub async fn api_providers(
     if state.zhipu_provider.is_some() {
         providers.insert("zhipu".to_string(), serde_json::json!({"id":"zhipu","name":"Zhipu AI","enabled":true,"source":"config"}));
     }
+    if state.minimax_provider.is_some() {
+        providers.insert("minimax".to_string(), serde_json::json!({"id":"minimax","name":"MiniMax","enabled":true,"source":"config"}));
+    }
 
     // Add dynamic registry providers
     if let Some(ref registry) = state.provider_registry {
@@ -127,6 +130,7 @@ pub async fn api_stats(
     let mut count = 0;
     if state.openai_provider.is_some() { count += 1; }
     if state.zhipu_provider.is_some() { count += 1; }
+    if state.minimax_provider.is_some() { count += 1; }
     if let Some(ref registry) = state.provider_registry {
         if let Ok(reg) = registry.lock() {
             count += reg.provider_names().len();

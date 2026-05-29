@@ -1,22 +1,23 @@
 server:
   host: "0.0.0.0"
-  port: 9080
+  port: 8788
   body_limit: 10485760 # 10MB
 
 providers:
   zhipu:
-    api_key: "9bc4908eeaec48109dc363c638c45457.qCuUoeMnsZme5eum"
+    api_key: ""
     base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
     default_model: "glm-5.1"
     timeout: 60
+  minimax:
+    api_key: "sk-cp-VpsYDDEir2cMvtEqq8YcU8szOonNJf2uJrrYd_h8yyGWneOalKaaHA7yM-59IsehKbI4x23QGt6bXx2ks6ROAQc4w5smKPSABEOI06hTdhAGU8JCW26CdQc"
+    base_url: "https://api.minimaxi.com/v1"
+    default_model: "MiniMax-M2.7"
+    timeout: 120
 
 routing:
-  default: "zhipu"
-  model_mapping:
-    glm-5: "zhipu"
-    glm-5.1: "zhipu"
-    glm-4: "zhipu"
-    glm-4-flash: "zhipu"
+  default: "minimax"
+  model_mapping: {}
 
 logging:
   level: "info"

@@ -36,8 +36,8 @@ impl MiniMaxProvider {
     pub fn from_env() -> Self {
         Self::new(ProviderConfig {
             api_key: std::env::var("MINIMAX_API_KEY").unwrap_or_default(),
-            base_url: "https://api.minimax.chat".to_string(),
-            default_model: "MiniMax-Text-01".to_string(),
+            base_url: "https://api.minimaxi.com/v1".to_string(),
+            default_model: "MiniMax-M2.7".to_string(),
             timeout: 120,
         })
     }
@@ -59,7 +59,8 @@ impl MiniMaxProvider {
     /// Built-in models for MiniMax
     pub fn builtin_models() -> Vec<String> {
         vec![
-            "MiniMax-Text-01".to_string(),    // Text model with reasoning
+            "MiniMax-M2.7".to_string(),  // Text model with reasoning
+            "MiniMax-Text-01".to_string(),    // Text model
             "abab6.5s-chat".to_string(),      // Chat model
             "abab6.5g-chat".to_string(),      // Enhanced chat
             "abab5.5-chat".to_string(),        // Standard chat
@@ -76,8 +77,8 @@ impl MiniMaxProvider {
 
     /// Prepare MiniMax-specific request body
     fn prepare_minimax_request(&self, request: &mut ChatRequest) {
-        // MiniMax may require specific model name handling
-        // Add any MiniMax-specific request modifications here
+        // MiniMax may need specific request modifications
+        // For now, just log the request
         tracing::debug!(
             model = %request.model,
             "MiniMax request preparation"
@@ -104,14 +105,21 @@ impl LLMProvider for MiniMaxProvider {
     }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, ProviderError> {
-        let url = self.build_url("/v1/text/chatcompletion_v2");
+        let url = self.build_url("/chat/completions");
 
-        // MiniMax may need request preparation
         let mut request = request;
-        self.prepare_minimax_request(&mut request);
 
         let request_body = serde_json::to_value(&request)
             .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
+
+        // MiniMax requires response_format as {"type": "text"}
+        // Fix the serialized response_format to match MiniMax's expected format
+        let mut request_body = request_body;
+        if let Some(obj) = request_body.as_object_mut() {
+            // Remove any existing response_format and add the correct one
+            obj.remove("response_format");
+            obj.insert("response_format".to_string(), serde_json::json!({"type": "text"}));
+        }
 
         tracing::debug!(
             url,
@@ -173,7 +181,7 @@ impl LLMProvider for MiniMaxProvider {
     }
 
     async fn chat_streaming(&self, request: ChatRequest) -> Result<StreamingChat, ProviderError> {
-        let url = self.build_url("/v1/text/chatcompletion_v2");
+        let url = self.build_url("/chat/completions");
 
         // MiniMax may need request preparation
         let mut request = request;
@@ -182,8 +190,12 @@ impl LLMProvider for MiniMaxProvider {
         let mut request_with_stream = serde_json::to_value(&request)
             .map_err(|e| ProviderError::InvalidRequest(e.to_string()))?;
 
-        // Add streaming parameter for MiniMax
+        // MiniMax requires response_format as {"type": "text"}
+        // Fix the serialized response_format to match MiniMax's expected format
+        let mut request_with_stream = request_with_stream;
         if let Some(obj) = request_with_stream.as_object_mut() {
+            obj.remove("response_format");
+            obj.insert("response_format".to_string(), serde_json::json!({"type": "text"}));
             obj.insert("stream".to_string(), serde_json::json!(true));
         }
 
