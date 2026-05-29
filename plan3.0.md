@@ -443,3 +443,357 @@ test('Codex 配置完整流程', async ({ page }) => {
 2. **本周**: 完成统计 API 增强
 3. **下周**: 前端统计面板开发
 4. **持续**: 编写单元测试和集成测试
+
+---
+
+##11. Real Validation Results (2026-05-29)
+
+###11.1 MiniMax-M2.7 Real Validation
+
+**Environment**: macOS Darwin24.5.0, Rust1.98.0-nightly
+
+#### Validated Items
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| Service start | PASS | `rcodex` listening on0.0.0.0:8788 |
+| DB init | PASS | `Database initialized at data/db/rcodex.db` |
+| Admin UI | PASS | `Admin UI available at http://0.0.0.0:8788/admin` |
+| Provider registration | PASS | `dispatching minimax request route=/v1/chat/completions` |
+| **MiniMax-M2.7 non-streaming** | PASS | Returned "Hello there, how are you?" (5 words) |
+| **MiniMax-M2.7 streaming** | PASS |6 SSE chunks, includes think tag reasoning |
+| **MiniMax-Text-01** | FAIL | HTTP400 `invalid params, binding: expr_path=response_format.type` |
+
+#### Real Response Example
+
+**MiniMax-M2.7 Streaming Response (validates reasoning mode works)**:
+```
+data: {"id":"0668c97a55131bc533f68c913403d75c","model":"MiniMax-M2.7","choices":[{"index":0,"delta":{"role":"assistant","content":"The user says \"Count to3\"..."}}]}
+data: {"id":"0668c97a55131bc533f68c913403d75c","model":"MiniMax-M2.7","choices":[{"index":0,"delta":{"content":"Sure! Here's the count to3:1,2,3"},"finishReason":"stop"}]}
+```
+
+###11.2 Code Defects Discovered
+
+#### CRITICAL DEFECTS
+
+**1. MiniMax-Text-01 response_format issue**
+- Location: `src/providers/minimax.rs:117-122` (chat), `src/providers/minimax.rs:194-200` (chat_streaming)
+- Problem: Code sets `{"type": "text"}` but MiniMax-Text-01 still returns400 error
+- Error: `binding: expr_path=response_format.type, cause=missing required parameter (2013)`
+- Possible cause: MiniMax-Text-01 and MiniMax-M2.7 use different API specifications
+- Impact: Text-01 model unavailable
+
+**2. MiniMax chat_streaming is not real streaming**
+- Location: `src/providers/minimax.rs:183-282`
+- Problem: Code reads entire SSE stream then collects into `Vec<ChatCompletionChunk>`, returns `StreamingChat::Collected`
+- Impact: Upstream waits for all data download before returning, high latency
+- Should change to: real-time forward each SSE chunk
+
+#### MEDIUM DEFECTS
+
+**3. minimax.rs:284-296 Responses API not implemented**
+- Location: `src/providers/minimax.rs:284-296`
+- Problem: `responses()` and `responses_streaming()` directly return errors
+- Impact: Codex CLI cannot use MiniMax directly (must use chat fallback)
+- Should change to: Implement Responses -> Chat request conversion
+
+**4. No Responses API protocol conversion layer**
+- Location: entire `src/protocol/` module
+- Problem: Codex CLI sends Responses format, but MiniMax only supports Chat Completions
+- Should change to: Add ResponsesRequest -> ChatRequest auto-conversion
+
+#### MINOR DEFECTS
+
+**5. Large number of unused code warnings**
+- Count:302 warnings (34 duplicates)
+- Location: many unused imports, variables, functions
+- Recommendation: Run `cargo fix --bin "rcodex"` to clean up
+
+---
+
+##12. Frontend Component Completeness Comparison (2026-05-29)
+
+###12.1 Implemented Pages
+
+| Page | rcodex-admin | mimo2codex |
+|------|--------------|------------|
+| Account | AccountPage.tsx | Account.tsx |
+| Dashboard | DashboardPage.tsx | Dashboard.tsx |
+| Models | ModelsPage.tsx | Models.tsx |
+| Codex | CodexPage.tsx | codex/index.ts (5 sub-components) |
+| Logs | LogsPage.tsx | logs/index.ts (3 sub-components) |
+| Providers | ProvidersPage.tsx | providers/index.ts (3 sub-components) |
+| Layout | Header/Sidebar/Layout | AppHeader |
+
+###12.2 Missing Pages (need to create)
+
+| Page | mimo2codex file | Priority | Estimate |
+|------|----------------|----------|----------|
+| Login | web/src/pages/Login.tsx | P0 |4h |
+| Register | web/src/pages/Register.tsx | P0 |3h |
+| Users | web/src/pages/Users.tsx | P1 |6h |
+| Bootstrap | web/src/pages/Bootstrap.tsx | P1 |4h |
+
+###12.3 Missing Codex Sub-Components (need to split CodexPage.tsx)
+
+| Sub-component | mimo2codex | rcodex-admin status |
+|---------------|------------|---------------------|
+| BackupCard.tsx | Standalone | Built into CodexPage.tsx (880 lines) |
+| CurrentStateCard.tsx | Standalone | Built-in |
+| ProviderBlock.tsx | Standalone | Built-in |
+| RuntimeOverrideCard.tsx | Standalone | Built-in |
+
+**Recommendation**: CodexPage.tsx is880 lines, too large, should be split into5 sub-components
+
+###12.4 Missing Shared Components
+
+| Component | mimo2codex | Purpose |
+|-----------|------------|---------|
+| DataDirManager.tsx | Data directory management |
+| KeyStatusBanner.tsx | Key status banner |
+| RestartRequiredBanner.tsx | Restart hint |
+| UpdateBanner.tsx | Update banner |
+| UpdateCommandModal.tsx | Update command |
+| UpdateModal.tsx | Update modal |
+| WhatsNewModal.tsx | New feature intro |
+| AppConfigContext.tsx | App config Context |
+| AuthContext.tsx | Auth Context |
+
+###12.5 Missing Logs Sub-Components
+
+| Component | Purpose |
+|-----------|---------|
+| BodyBlock.tsx | Log body block display |
+
+---
+
+##13. Backend API Completeness Comparison
+
+###13.1 Implemented
+
+- Codex CRUD:18 endpoints complete
+- Provider CRUD:10 endpoints complete
+- Models CRUD:5 endpoints complete
+- Logs CRUD:3 endpoints complete
+- Stats:5 endpoints complete
+
+###13.2 Pending Implementation
+
+| Module | mimo2codex endpoints | rcodex status |
+|--------|---------------------|---------------|
+| Auth | POST /auth/login, /auth/logout, /auth/refresh | MISSING |
+| Users | GET /users, POST /users, PATCH /users/:id, DELETE /users/:id | MISSING |
+| API Key | GET /me/api-keys, POST /me/api-keys, DELETE /me/api-keys/:id | MISSING |
+| Data Dir | GET /data-dir/info, POST /data-dir/preview, POST /data-dir/migrate (SSE) | MISSING |
+| Update Check | GET /update-status, POST /check-update, PUT /update-preference | MISSING |
+| Bootstrap | GET /bootstrap-status, POST /bootstrap | MISSING |
+
+---
+
+##14. Subsequent Development Plan (revised2026-05-29)
+
+### Phase1: Core Codex Functionality Fix (P0, this week)
+
+####1.1 Fix MiniMax-Text-01 response_format issue
+
+| Task | File | Test Case |
+|------|------|-----------|
+| Investigate MiniMax-Text-01 API spec | docs | Manual curl test |
+| Modify response_format format | src/providers/minimax.rs | `test_minimax_text_01_chat` |
+| Add MiniMax model-specific config | src/config/app_config.rs | Config-driven |
+
+####1.2 Implement real StreamingChat
+
+| Task | File | Test Case |
+|------|------|-----------|
+| Switch to futures::stream forwarding | src/providers/minimax.rs | `test_minimax_streaming_latency` |
+| Unit test: streaming latency <100ms | tests/streaming.rs | Validate first-byte time |
+
+####1.3 Implement Responses API Protocol Conversion
+
+| Task | File | Test Case |
+|------|------|-----------|
+| Create ResponsesToChat converter | src/protocol/responses_to_chat.rs | `test_response_to_chat_conversion` |
+| Make MiniMax support Responses requests | src/providers/minimax.rs | `test_minimax_responses_chat` |
+| Codex CLI end-to-end test | tests/codex_cli_e2e.rs | codex through rcodex calls MiniMax-M2.7 |
+
+### Phase2: User Authentication System (P0, next week)
+
+####2.1 Backend Implementation
+
+| Task | Priority | Test Case |
+|------|----------|-----------|
+| Implement POST /auth/login | P0 | Login success/fail/lock |
+| Implement POST /auth/logout | P0 | Token invalidation |
+| Implement POST /auth/refresh | P1 | JWT refresh |
+| Implement users management CRUD | P1 | Users CRUD |
+| Implement API Key management | P1 | Create/delete API Key |
+
+####2.2 Frontend Implementation
+
+| Task | Priority | Test Case |
+|------|----------|-----------|
+| Create Login.tsx | P0 | Form validation |
+| Create Register.tsx | P0 | Registration flow |
+| Create AuthContext | P0 | Token persistence |
+| Create Users.tsx | P1 | Users list |
+| Add ProtectedRoute | P0 | Redirect when not logged in |
+
+### Phase3: Codex Sub-Component Split (P1, week3)
+
+####3.1 Split CodexPage.tsx
+
+| Task | File | Test Case |
+|------|------|-----------|
+| Split BackupCard | components/codex/BackupCard.tsx | Component render test |
+| Split CurrentStateCard | components/codex/CurrentStateCard.tsx | State display test |
+| Split ProviderBlock | components/codex/ProviderBlock.tsx | Provider selection test |
+| Split RuntimeOverrideCard | components/codex/RuntimeOverrideCard.tsx | Runtime override test |
+| Split ImportModal | components/codex/ImportModal.tsx (exists) | Import test |
+| Split SetupSnippets | components/codex/SetupSnippets.tsx (exists) | Code snippets test |
+
+### Phase4: Advanced Features (P2, week4)
+
+####4.1 Data Directory Management
+
+| Task | File | Test Case |
+|------|------|-----------|
+| Implement /data-dir/info | src/handlers/admin/extras.rs | Return data dir info |
+| Implement /data-dir/preview | src/handlers/admin/extras.rs | Migration preview |
+| Implement /data-dir/migrate (SSE) | src/handlers/admin/extras.rs | Migration progress stream |
+| Frontend DataDirManager | rcodex-admin/src/components/DataDirManager.tsx | UI test |
+
+####4.2 Update Check
+
+| Task | File | Test Case |
+|------|------|-----------|
+| Implement /update-status | src/handlers/admin/extras.rs | Version info |
+| Implement /check-update | src/handlers/admin/extras.rs | Check update |
+| Implement /update-preference | src/handlers/admin/extras.rs | Update preference |
+| Frontend UpdateBanner/Modal | rcodex-admin/src/components/ | UI test |
+
+####4.3 Bootstrap Setup
+
+| Task | File | Test Case |
+|------|------|-----------|
+| Implement /bootstrap-status | src/handlers/admin/extras.rs | First-time startup detection |
+| Implement /bootstrap | src/handlers/admin/extras.rs | Initialize admin |
+| Frontend Bootstrap.tsx | rcodex-admin/src/components/BootstrapPage.tsx | First-time startup UI |
+
+---
+
+##15. Real Validation Test Cases (NEW)
+
+###15.1 MiniMax-M2.7 Real Test
+
+```bash
+# Start service
+cargo build && ./target/debug/rcodex &
+
+# Non-streaming test
+curl -X POST http://localhost:8788/v1/chat/completions \
+ -H "Content-Type: application/json" \
+ -d '{"model":"MiniMax-M2.7","messages":[{"role":"user","content":"Say hello"}]}'
+
+# Streaming test
+curl -X POST http://localhost:8788/v1/chat/completions \
+ -H "Content-Type: application/json" \
+ -d '{"model":"MiniMax-M2.7","messages":[{"role":"user","content":"Count to3"}],"stream":true}'
+
+# Validate reasoning mode
+# Expected: SSE chunks include think tag reasoning content
+```
+
+###15.2 Codex CLI End-to-End Test
+
+```bash
+#1. Start rcodex
+./target/debug/rcodex &
+
+#2. Apply MiniMax config
+curl -X POST http://localhost:8788/admin/api/codex-apply \
+ -H "Content-Type: application/json" \
+ -d '{"provider_id":"minimax","model_id":"MiniMax-M2.7"}'
+
+#3. Run codex CLI (through rcodex proxy)
+codex "Say hello"
+
+#4. Validate response
+# Expected: codex through rcodex routes to MiniMax-M2.7 and returns result
+```
+
+###15.3 Admin UI Real Test
+
+```bash
+#1. Visit Admin UI
+open http://localhost:8788/admin
+
+#2. Validate pages
+# - Dashboard: shows statistics
+# - Codex: shows current config
+# - Providers: shows MiniMax provider
+# - Models: shows MiniMax-M2.7
+# - Logs: shows request logs
+```
+
+---
+
+##16. Key Decisions
+
+###16.1 TUI vs Web UI Priority
+
+**Conclusion**: rcodex has no TUI, only Web Admin UI
+- mimo2codex is also Web UI, not TUI
+- User's mention of "TUI" actually refers to Web UI
+- Real need is to transform Web UI Codex page to match mimo2codex
+
+###16.2 Architecture Decisions
+
+| Decision | Choice | Reason |
+|----------|--------|--------|
+| TUI implementation | Not implemented | mimo2codex has no TUI either |
+| Web UI library | shadcn/ui | Already implemented, keep consistent |
+| Backend auth | JWT + bcrypt | Industry standard |
+| Database migration | Custom migration | Simple, controllable |
+| Real-time updates | SSE | Migration progress and similar scenarios |
+
+###16.3 No Dependency on mimo2codex
+
+**IMPORTANT**: rcodex implements independently, does not depend on mimo2codex
+- Only references design ideas and API endpoints
+- All code self-developed
+- Tests written independently
+
+---
+
+##17. Real Run Records (2026-05-2921:36)
+
+###17.1 Startup
+
+```bash
+$ cargo build
+ Compiling rcodex v0.1.0
+ Finished `dev` profile [unoptimized + debuginfo] target(s) in0.34s
+
+$ ./target/debug/rcodex
+INFO rcodex: Starting OpenAI Proxy Server on0.0.0.0:8788
+INFO rcodex::db::schema: Database initialized at "data/db/rcodex.db"
+INFO rcodex::server::router: Server listening on0.0.0.0:8788
+INFO rcodex::server::router: Admin UI available at http://0.0.0.0:8788/admin
+```
+
+###17.2 Test Results
+
+| Test | Status | Response Time |
+|------|--------|---------------|
+| MiniMax-M2.7 non-streaming | PASS |328ms |
+| MiniMax-M2.7 streaming | PASS |423ms (first byte) |
+| MiniMax-Text-01 | FAIL |400 error |
+
+###17.3 Subsequent Real Test Plan
+
+- [] Codex CLI end-to-end test (through rcodex proxy MiniMax-M2.7)
+- [] Admin UI real access test
+- [] Fix MiniMax-Text-01 response_format issue
+- [] Implement real StreamingChat (reduce latency)
+- [] Implement Responses API protocol conversion
