@@ -7,6 +7,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -78,14 +79,14 @@ pub async fn post_codex_apply(
     };
     
     let host = crate::setup::HostConfig::new("127.0.0.1", 8080);
-    let result = crate::codex::apply_codex(&target, &host);
+    let result = crate::codex::apply_codex(target.clone(), &host);
     
     let response = ApplyCodexResponse {
         backup_ts: result.backup_ts,
         auth_backup: result.auth_backup.map(|p| p.to_string_lossy().to_string()),
         toml_backup: result.toml_backup.map(|p| p.to_string_lossy().to_string()),
-        auth_json_owner_before: result.auth_json_owner_before.to_string(),
-        preserved: result.preserved,
+        auth_json_owner_before: format!("{:?}", result.auth_json_owner_before),
+        preserved: false,
     };
     
     (StatusCode::OK, Json(ApiResponse::success(response))).into_response()
@@ -115,8 +116,27 @@ pub async fn post_codex_restore(
 }
 
 /// GET /admin/api/active-override
-pub async fn get_active_override_handler() -> Json<ApiResponse<serde_json::Value>> {
-    Json(ApiResponse::success(serde_json::json!({ "override": serde_json::Value::Null })))
+pub async fn get_active_override_handler(
+    State(state): State<Arc<crate::handlers::AppState>>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let override_info = if let Some(ref repo) = state.request_repo {
+        if let Ok(conn) = repo.get_connection() {
+            if let Some(override_) = crate::db::get_active_override(&conn) {
+                serde_json::json!({
+                    "providerId": override_.provider_id,
+                    "modelId": override_.model_id
+                })
+            } else {
+                serde_json::Value::Null
+            }
+        } else {
+            serde_json::Value::Null
+        }
+    } else {
+        serde_json::Value::Null
+    };
+
+    Json(ApiResponse::success(serde_json::json!({ "override": override_info })))
 }
 
 /// PUT /admin/api/active-override
@@ -127,17 +147,32 @@ pub struct SetOverrideRequest {
 }
 
 pub async fn put_active_override_handler(
+    State(state): State<Arc<crate::handlers::AppState>>,
     Json(req): Json<SetOverrideRequest>,
 ) -> Json<ApiResponse<serde_json::Value>> {
+    if let Some(ref repo) = state.request_repo {
+        if let Ok(conn) = repo.get_connection() {
+            crate::db::set_active_override(&conn, &req.provider_id, &req.model_id);
+        }
+    }
+
     let override_ = serde_json::json!({
-        "provider_id": req.provider_id,
-        "model_id": req.model_id
+        "providerId": req.provider_id,
+        "modelId": req.model_id
     });
     Json(ApiResponse::success(serde_json::json!({ "override": override_ })))
 }
 
 /// DELETE /admin/api/active-override
-pub async fn delete_active_override_handler() -> impl IntoResponse {
+pub async fn delete_active_override_handler(
+    State(state): State<Arc<crate::handlers::AppState>>,
+) -> impl IntoResponse {
+    if let Some(ref repo) = state.request_repo {
+        if let Ok(conn) = repo.get_connection() {
+            crate::db::clear_active_override(&conn);
+        }
+    }
+
     let response = serde_json::json!({
         "ok": true,
         "data": { "override": serde_json::Value::Null },
@@ -151,15 +186,82 @@ pub async fn delete_active_override_handler() -> impl IntoResponse {
 // ============================================================================
 
 /// GET /admin/api/codex-history - List history entries
-pub async fn get_codex_history_handler() -> Json<ApiResponse<Vec<crate::db::CodexHistoryEntry>>> {
-    let entries: Vec<_> = Vec::new();
-    Json(ApiResponse::success(entries))
+pub async fn get_codex_history_handler(
+    State(state): State<Arc<crate::handlers::AppState>>,
+) -> Json<ApiResponse<Vec<crate::db::CodexHistoryEntry>>> {
+    if let Some(ref repo) = state.request_repo {
+        if let Ok(conn) = repo.get_connection() {
+            // Get entries from codex_config_history table
+            let mut stmt = match conn.prepare(
+                "SELECT id, user_id, provider_id, model_id, auth_backup_path, config_backup_path, preserved, created_at FROM codex_config_history ORDER BY created_at DESC LIMIT 50"
+            ) {
+                Ok(s) => s,
+                Err(_) => return Json(ApiResponse::success(Vec::new())),
+            };
+
+            let entries: Vec<crate::db::CodexHistoryEntry> = stmt
+                .query_map([], |row| {
+                    let auth_backup_path: Option<String> = row.get(4)?;
+                    let config_backup_path: Option<String> = row.get(5)?;
+                    let created_at_str: String = row.get(7)?;
+
+                    Ok(crate::db::CodexHistoryEntry {
+                        id: row.get(0)?,
+                        user_id: row.get(1)?,
+                        kind: crate::db::HistoryKind::Apply,
+                        auth_json: auth_backup_path.unwrap_or_default(),
+                        config_toml: config_backup_path.unwrap_or_default(),
+                        note: None,
+                        created_at: chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                            .map(|dt| dt.timestamp_millis())
+                            .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis()),
+                    })
+                })
+                .ok()
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default();
+
+            return Json(ApiResponse::success(entries));
+        }
+    }
+    Json(ApiResponse::success(Vec::new()))
 }
 
 /// GET /admin/api/codex-history/:id - Get specific history entry
 pub async fn get_codex_history_by_id_handler(
+    State(state): State<Arc<crate::handlers::AppState>>,
     axum::extract::Path(id): axum::extract::Path<i64>,
 ) -> Json<ApiResponse<crate::db::CodexHistoryEntry>> {
+    if let Some(ref repo) = state.request_repo {
+        if let Ok(conn) = repo.get_connection() {
+            let result: Result<crate::db::CodexHistoryEntry, _> = conn.query_row(
+                "SELECT id, user_id, provider_id, model_id, auth_backup_path, config_backup_path, preserved, created_at FROM codex_config_history WHERE id = ?1",
+                [id],
+                |row| {
+                    let auth_backup_path: Option<String> = row.get(4)?;
+                    let config_backup_path: Option<String> = row.get(5)?;
+                    let created_at_str: String = row.get(7)?;
+
+                    Ok(crate::db::CodexHistoryEntry {
+                        id: row.get(0)?,
+                        user_id: row.get(1)?,
+                        kind: crate::db::HistoryKind::Apply,
+                        auth_json: auth_backup_path.unwrap_or_default(),
+                        config_toml: config_backup_path.unwrap_or_default(),
+                        note: None,
+                        created_at: chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                            .map(|dt| dt.timestamp_millis())
+                            .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis()),
+                    })
+                },
+            );
+
+            match result {
+                Ok(entry) => return Json(ApiResponse::success(entry)),
+                Err(_) => return Json(ApiResponse::error(&format!("History entry {} not found", id))),
+            }
+        }
+    }
     Json(ApiResponse::error(&format!("History entry {} not found", id)))
 }
 
@@ -274,11 +376,12 @@ pub async fn probe_handler(
     
     let start = Instant::now();
     
-    // Get provider config
+    // Get provider config - match mimo2codex provider naming
     let provider_config = match req.provider_id.as_str() {
-        "openai" => state.config.providers.openai.as_ref(),
+        "mimo" | "openai" => state.config.providers.openai.as_ref(),
         "zhipu" => Some(&state.config.providers.zhipu),
         "minimax" => state.config.providers.minimax.as_ref(),
+        "deepseek" => state.config.providers.openai.as_ref(), // Use openai config as fallback
         _ => None,
     };
     
@@ -840,20 +943,43 @@ pub async fn get_settings_handler(
 // Generic Providers API - Manage custom providers
 // ============================================================================
 
+// ============================================================================
+// Generic Providers API - Read custom provider configurations
+// ============================================================================
+
+/// Generic provider spec for API response
 #[derive(Debug, Serialize)]
 pub struct GenericProvidersSpec {
     pub id: String,
+    pub shortcut: Option<String>,
+    pub display_name: Option<String>,
     pub base_url: String,
     pub env_key: String,
-    pub default_model: String,
-    pub models: Vec<GenericProviderModelSpec>,
+    pub default_model: Option<String>,
+    pub wire_api: Option<String>,
+    pub models: Option<Vec<String>>,
+    pub path: Option<String>,
+    pub exists: bool,
 }
 
-#[derive(Debug, Serialize)]
-pub struct GenericProviderModelSpec {
-    pub id: String,
-    pub display_name: Option<String>,
-    pub context_window: Option<u32>,
+impl From<&crate::providers::generic_provider::GenericProviderSpec> for GenericProvidersSpec {
+    fn from(spec: &crate::providers::generic_provider::GenericProviderSpec) -> Self {
+        Self {
+            id: spec.id.clone(),
+            shortcut: spec.shortcut.clone(),
+            display_name: spec.display_name.clone(),
+            base_url: spec.base_url.clone(),
+            env_key: spec.env_key.clone(),
+            default_model: spec.default_model.clone(),
+            wire_api: spec.wire_api.as_ref().map(|w| match w {
+                crate::providers::generic_provider::WireApi::Chat => "chat".to_string(),
+                crate::providers::generic_provider::WireApi::Responses => "responses".to_string(),
+            }),
+            models: spec.models.as_ref().map(|m| m.iter().map(|x| x.id.clone()).collect()),
+            path: None,
+            exists: true,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -865,13 +991,57 @@ pub struct GenericProvidersResponse {
 }
 
 /// GET /admin/api/generic-providers - Get custom provider configurations
-pub async fn get_generic_providers_handler() -> Json<ApiResponse<GenericProvidersResponse>> {
-    // Return empty list for now - custom providers not yet implemented
+pub async fn get_generic_providers_handler(
+    State(state): State<Arc<AppState>>,
+) -> Json<ApiResponse<GenericProvidersResponse>> {
+    let mut specs = Vec::new();
+    let mut path = None;
+    let mut source = None;
+    let mut exists = false;
+
+    // Check for generic provider loader in state
+    if let Some(ref loader) = state.generic_provider_loader {
+        if let Ok(registry) = loader.lock() {
+            for spec in registry.iter() {
+                specs.push(GenericProvidersSpec::from(spec));
+            }
+            source = Some("loader".to_string());
+            exists = !specs.is_empty();
+        }
+    }
+
+    // If no specs from loader, try to load from file
+    if specs.is_empty() {
+        let generic_providers_path = std::path::Path::new("config/generic_providers.json");
+        if generic_providers_path.exists() {
+            match std::fs::read_to_string(generic_providers_path) {
+                Ok(content) => {
+                    match serde_json::from_str::<crate::providers::generic_provider::ProvidersFile>(&content) {
+                        Ok(file) => {
+                            for spec in file.providers {
+                                specs.push(GenericProvidersSpec::from(&spec));
+                            }
+                            path = Some(generic_providers_path.display().to_string());
+                            source = Some("file".to_string());
+                            exists = true;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse generic_providers.json: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read generic_providers.json: {}", e);
+                }
+            }
+        }
+    }
+
     Json(ApiResponse::success(GenericProvidersResponse {
-        specs: vec![],
-        path: None,
-        source: None,
-        exists: false,
+        specs,
+        path,
+        source,
+        exists,
     }))
 }
 
@@ -897,15 +1067,53 @@ pub struct StatsResponse {
 }
 
 /// GET /admin/api/request-stats - Get request statistics
-pub async fn get_request_stats_handler() -> Json<ApiResponse<StatsResponse>> {
-    // Return empty stats for now - stats collection not yet implemented
-    Json(ApiResponse::success(StatsResponse {
-        since: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64 - 86400,
-        rows: vec![],
-    }))
+pub async fn get_request_stats_handler(
+    State(state): State<Arc<AppState>>,
+) -> Json<ApiResponse<StatsResponse>> {
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64 - 86400;
+
+    let mut rows = Vec::new();
+
+    if let Some(ref repo) = state.request_repo {
+        if let Ok(conn) = repo.get_connection() {
+            // Get stats grouped by provider and model
+            let mut stmt = match conn.prepare(
+                "SELECT provider, model, COUNT(*) as requests,
+                        SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors,
+                        COALESCE(SUM(tokens_used), 0) as total_tokens,
+                        COUNT(*) as req_count
+                 FROM requests
+                 WHERE created_at >= datetime('now', '-1 day')
+                 GROUP BY provider, model
+                 ORDER BY requests DESC"
+            ) {
+                Ok(s) => s,
+                Err(_) => return Json(ApiResponse::success(StatsResponse { since, rows: vec![] })),
+            };
+
+            let stats: Vec<StatsRow> = stmt.query_map([], |row| {
+                let requests: i64 = row.get(4)?;
+                Ok(StatsRow {
+                    provider_id: row.get(0)?,
+                    upstream_model: row.get(1)?,
+                    requests: row.get::<_, i64>(4)? as u64,
+                    errors: row.get::<_, i64>(3)? as u64,
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: row.get::<_, i64>(2)? as u64,
+                })
+            }).ok()
+            .map(|r| r.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default();
+
+            rows = stats;
+        }
+    }
+
+    Json(ApiResponse::success(StatsResponse { since, rows }))
 }
 
 // ============================================================================
@@ -935,10 +1143,95 @@ pub struct LogsResponse {
 
 /// GET /admin/api/logs - Get request logs
 pub async fn get_logs_handler(
+    State(state): State<Arc<AppState>>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Json<ApiResponse<LogsResponse>> {
-    // Return empty logs for now - log collection not yet implemented
-    Json(ApiResponse::success(LogsResponse {
-        logs: vec![],
-    }))
+    let mut logs = Vec::new();
+
+    // Parse pagination params
+    let limit = params.get("limit")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(100);
+    let offset = params.get("offset")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(0);
+    let provider_filter = params.get("provider").map(|s| s.as_str());
+
+    if let Some(ref repo) = state.request_repo {
+        if let Ok(conn) = repo.get_connection() {
+            // Build query based on filters
+            let query = if let Some(provider) = provider_filter {
+                format!(
+                    "SELECT id, provider, model, endpoint, status_code, latency_ms, tokens_used, error_message, created_at
+                     FROM requests WHERE provider = ?1 ORDER BY created_at DESC LIMIT {} OFFSET {}",
+                    limit, offset
+                )
+            } else {
+                format!(
+                    "SELECT id, provider, model, endpoint, status_code, latency_ms, tokens_used, error_message, created_at
+                     FROM requests ORDER BY created_at DESC LIMIT {} OFFSET {}",
+                    limit, offset
+                )
+            };
+
+            let mut stmt = match conn.prepare(&query) {
+                Ok(s) => s,
+                Err(_) => return Json(ApiResponse::success(LogsResponse { logs: vec![] })),
+            };
+
+            let log_rows: Vec<LogRow> = if let Some(provider) = provider_filter {
+                stmt.query_map(params![provider], |row| {
+                    let created_at_str: String = row.get(8)?;
+                    let ts = chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                        .map(|dt| dt.timestamp_millis())
+                        .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
+
+                    Ok(LogRow {
+                        id: row.get(0)?,
+                        ts,
+                        provider_id: row.get(1)?,
+                        client_model: row.get(2)?,
+                        upstream_model: row.get(2)?,
+                        endpoint: row.get(3)?,
+                        status_code: row.get::<_, Option<i32>>(4)?.unwrap_or(0) as u16,
+                        duration_ms: row.get::<_, Option<i32>>(5)?.unwrap_or(0) as u64,
+                        prompt_tokens: None,
+                        completion_tokens: None,
+                        total_tokens: row.get::<_, Option<i32>>(6)?.map(|t| t as u64),
+                        error_code: row.get(7)?,
+                    })
+                }).ok()
+                .map(|r| r.filter_map(|x| x.ok()).collect())
+                .unwrap_or_default()
+            } else {
+                stmt.query_map([], |row| {
+                    let created_at_str: String = row.get(8)?;
+                    let ts = chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                        .map(|dt| dt.timestamp_millis())
+                        .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
+
+                    Ok(LogRow {
+                        id: row.get(0)?,
+                        ts,
+                        provider_id: row.get(1)?,
+                        client_model: row.get(2)?,
+                        upstream_model: row.get(2)?,
+                        endpoint: row.get(3)?,
+                        status_code: row.get::<_, Option<i32>>(4)?.unwrap_or(0) as u16,
+                        duration_ms: row.get::<_, Option<i32>>(5)?.unwrap_or(0) as u64,
+                        prompt_tokens: None,
+                        completion_tokens: None,
+                        total_tokens: row.get::<_, Option<i32>>(6)?.map(|t| t as u64),
+                        error_code: row.get(7)?,
+                    })
+                }).ok()
+                .map(|r| r.filter_map(|x| x.ok()).collect())
+                .unwrap_or_default()
+            };
+
+            logs = log_rows;
+        }
+    }
+
+    Json(ApiResponse::success(LogsResponse { logs }))
 }

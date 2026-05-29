@@ -81,6 +81,48 @@ impl ThinkSplitter {
         self.reset();
         result
     }
+
+    /// Flush any pending thinking content and return it along with remaining content.
+    /// This is used at the end of streaming to ensure all buffered content is processed.
+    pub fn flush(&mut self) -> (String, Option<String>) {
+        // Get any remaining buffer content
+        let pending_content = std::mem::take(&mut self.buffer);
+
+        // Process any unclosed thinking tag
+        let reasoning = if pending_content.contains("<think>") && !pending_content.contains("</think>") {
+            // Extract content before the opening tag
+            let content_before_think = if let Some(pos) = pending_content.find("<think>") {
+                pending_content[..pos].to_string()
+            } else {
+                pending_content.clone()
+            };
+
+            // Extract thinking content (everything after <think>)
+            let think_content = if let Some(pos) = pending_content.find("<think>") {
+                let after_open = &pending_content[pos + 4..];
+                // This is incomplete thinking, add to reasoning buffer
+                self.reasoning_buffer.push_str(after_open);
+                Some(self.reasoning_buffer.trim().to_string())
+            } else {
+                None
+            };
+
+            self.reasoning_buffer.clear();
+            self.in_think = false;
+
+            (content_before_think, think_content)
+        } else {
+            self.buffer.clear();
+            (pending_content, None)
+        };
+
+        (reasoning.0, reasoning.1)
+    }
+
+    /// Check if there's pending content (carry buffer) that hasn't been flushed
+    pub fn has_pending(&self) -> bool {
+        !self.buffer.is_empty() || !self.reasoning_buffer.is_empty() || self.in_think
+    }
 }
 
 impl Default for ThinkSplitter {

@@ -8,7 +8,7 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use openai_proxy::{config::Config, handlers::AppState};
+use rcodex::{config::Config, handlers::AppState};
 use serde_json::json;
 use std::{
     fs,
@@ -21,49 +21,52 @@ use tower::ServiceExt;
 
 fn create_test_config() -> Config {
     Config {
-        server: openai_proxy::config::ServerConfig::default(),
-        providers: openai_proxy::config::ProvidersConfig {
-            openai: Some(openai_proxy::config::ProviderConfig {
+        server: rcodex::config::ServerConfig::default(),
+        providers: rcodex::config::ProvidersConfig {
+            openai: Some(rcodex::config::ProviderConfig {
                 api_key: "test-openai-key".to_string(),
                 base_url: "https://api.openai.com/v1".to_string(),
                 default_model: "gpt-4o".to_string(),
                 timeout: 60,
             }),
-            zhipu: openai_proxy::config::ProviderConfig {
+            zhipu: rcodex::config::ProviderConfig {
                 api_key: "test-zhipu-key".to_string(),
                 base_url: "https://open.bigmodel.cn/api/paas/v4".to_string(),
                 default_model: "glm-4".to_string(),
                 timeout: 60,
             },
+            minimax: None,
         },
-        routing: openai_proxy::config::RoutingConfig {
+        routing: rcodex::config::RoutingConfig {
             default: "openai".to_string(),
             model_mapping: None,
         },
-        logging: openai_proxy::config::LoggingConfig {
+        logging: rcodex::config::LoggingConfig {
             level: "info".to_string(),
             format: "json".to_string(),
             file_path: "logs/server.log".to_string(),
         },
-        codex_cli: openai_proxy::config::CodexCliConfig::default(),
+        codex_cli: rcodex::config::CodexCliConfig::default(),
     }
 }
 
 fn create_app() -> axum::Router {
+    use rcodex::handlers::admin::AdminState;
     let config = create_test_config();
     let state = Arc::new(AppState::new(config));
-    openai_proxy::server::router::create_router(state)
+    let admin_state = Arc::new(AdminState::new());
+    rcodex::server::router::create_router(state, admin_state)
 }
 
 #[test]
 fn test_binary_stays_running_after_startup() {
     let binary =
-        std::env::var("CARGO_BIN_EXE_openai-proxy").expect("cargo should provide binary path");
+        std::env::var("CARGO_BIN_EXE_rcodex").expect("cargo should provide binary path");
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let temp_dir = std::env::temp_dir().join(format!("openai-proxy-startup-{unique}"));
+    let temp_dir = std::env::temp_dir().join(format!("rcodex-startup-{unique}"));
     fs::create_dir_all(&temp_dir).unwrap();
 
     let config = r#"
@@ -113,12 +116,12 @@ logging:
 #[test]
 fn test_binary_creates_and_truncates_log_file_on_startup() {
     let binary =
-        std::env::var("CARGO_BIN_EXE_openai-proxy").expect("cargo should provide binary path");
+        std::env::var("CARGO_BIN_EXE_rcodex").expect("cargo should provide binary path");
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let temp_dir = std::env::temp_dir().join(format!("openai-proxy-log-startup-{unique}"));
+    let temp_dir = std::env::temp_dir().join(format!("rcodex-log-startup-{unique}"));
     let log_dir = temp_dir.join("logs");
     let log_path = log_dir.join("server.log");
     fs::create_dir_all(&log_dir).unwrap();
@@ -500,31 +503,32 @@ async fn test_provider_selection_by_model() {
 async fn test_missing_provider_error() {
     // Create config without API keys
     let config = Config {
-        server: openai_proxy::config::ServerConfig::default(),
-        providers: openai_proxy::config::ProvidersConfig {
-            openai: Some(openai_proxy::config::ProviderConfig {
+        server: rcodex::config::ServerConfig::default(),
+        providers: rcodex::config::ProvidersConfig {
+            openai: Some(rcodex::config::ProviderConfig {
                 api_key: "".to_string(),
                 base_url: "https://api.openai.com/v1".to_string(),
                 default_model: "gpt-4o".to_string(),
                 timeout: 60,
             }),
-            zhipu: openai_proxy::config::ProviderConfig {
+            zhipu: rcodex::config::ProviderConfig {
                 api_key: "".to_string(),
                 base_url: "https://open.bigmodel.cn/api/paas/v4".to_string(),
                 default_model: "glm-4".to_string(),
                 timeout: 60,
             },
+            minimax: None,
         },
-        routing: openai_proxy::config::RoutingConfig {
+        routing: rcodex::config::RoutingConfig {
             default: "openai".to_string(),
             model_mapping: None,
         },
-        logging: openai_proxy::config::LoggingConfig {
+        logging: rcodex::config::LoggingConfig {
             level: "info".to_string(),
             format: "json".to_string(),
             file_path: "logs/server.log".to_string(),
         },
-        codex_cli: openai_proxy::config::CodexCliConfig::default(),
+        codex_cli: rcodex::config::CodexCliConfig::default(),
     };
 
     let state = Arc::new(AppState::new(config));

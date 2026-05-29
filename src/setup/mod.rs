@@ -35,6 +35,7 @@ impl HostConfig {
 pub enum ProviderTarget {
     Mimo,
     DeepSeek,
+    MiniMax,
 }
 
 impl ProviderTarget {
@@ -42,6 +43,7 @@ impl ProviderTarget {
         match s.to_lowercase().as_str() {
             "mimo" | "m" => Some(ProviderTarget::Mimo),
             "ds" | "deepseek" => Some(ProviderTarget::DeepSeek),
+            "minimax" | "mm" => Some(ProviderTarget::MiniMax),
             _ => None,
         }
     }
@@ -50,6 +52,7 @@ impl ProviderTarget {
         match self {
             ProviderTarget::Mimo => "mimo-v2.5-pro",
             ProviderTarget::DeepSeek => "deepseek-v4-pro",
+            ProviderTarget::MiniMax => "MiniMax-M2.7",
         }
     }
     
@@ -81,6 +84,7 @@ pub fn build_cc_switch_files(host: &HostConfig, target: &ProviderTarget) -> CcSw
     let (model_provider, model) = match target {
         ProviderTarget::Mimo => ("mimo2codex", "mimo-v2.5-pro"),
         ProviderTarget::DeepSeek => ("mimo2codex", "deepseek-v4-pro"),
+        ProviderTarget::MiniMax => ("CodexPlusPlus", "MiniMax-M2.7"),
     };
     
     let config_toml = format!(
@@ -121,6 +125,7 @@ pub fn cc_switch_snippet(host: &HostConfig, target: &ProviderTarget) -> String {
         match target {
             ProviderTarget::Mimo => "MiMo",
             ProviderTarget::DeepSeek => "DeepSeek",
+            ProviderTarget::MiniMax => "MiniMax",
         },
         files.auth_json,
         files.config_toml

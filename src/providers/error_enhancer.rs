@@ -128,20 +128,26 @@ impl EnhancedError {
     /// Detect web search disabled error
     pub fn detect_web_search_disabled(body: &str) -> Option<Self> {
         let patterns = [
+            // MiMo specific marker
+            "webSearchEnabled is false",
+            // Standard patterns
+            "web_search_enabled is false",
             "web_search_enabled is false",
             "web search is not enabled",
             "search is not enabled",
             "search_enabled is false",
+            "web search plugin",
+            "plugin not activated",
         ];
 
         let body_lower = body.to_lowercase();
         for pattern in &patterns {
             if body_lower.contains(&pattern.to_lowercase()) {
                 return Some(Self::new(
-                    "web_search_disabled",
-                    "Web search is not enabled for this model.",
+                    "web_search_plugin_not_activated",
+                    "MiMo Web Search Plugin is not activated for this account.",
                 )
-                .with_hint("Enable web search in your model configuration or remove web search tools."));
+                .with_hint("Activate the Web Search Plugin at https://platform.xiaomimimo.com/#/console/plugin (separately billed) and restart the proxy."));
             }
         }
 
@@ -255,10 +261,11 @@ mod tests {
     fn test_web_search_disabled() {
         let body = "web_search_enabled is false for this model";
         let result = EnhancedError::detect_web_search_disabled(body);
-        
+
         assert!(result.is_some());
         let error = result.unwrap();
-        assert_eq!(error.code, "web_search_disabled");
+        assert_eq!(error.code, "web_search_plugin_not_activated");
+        assert!(error.hint.is_some()); // Should have activation hint
     }
 }
 
@@ -352,7 +359,7 @@ mod mimo2codex_tests {
         let body = "web_search_enabled is false, please enable Web Search Plugin";
         let result = EnhancedError::detect_web_search_disabled(body);
         assert!(result.is_some());
-        assert_eq!(result.unwrap().code, "web_search_disabled");
+        assert_eq!(result.unwrap().code, "web_search_plugin_not_activated");
     }
 
     #[test]
@@ -360,5 +367,26 @@ mod mimo2codex_tests {
         let body = "WEB_SEARCH_ENABLED IS FALSE";
         let result = EnhancedError::detect_web_search_disabled(body);
         assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_mimo_websearch_error_detection() {
+        // MiMo specific marker
+        let body = "webSearchEnabled is false, please enable Web Search Plugin";
+        let result = EnhancedError::detect_web_search_disabled(body);
+        assert!(result.is_some());
+        let error = result.unwrap();
+        assert_eq!(error.code, "web_search_plugin_not_activated");
+        assert!(error.hint.is_some()); // Should have activation hint
+    }
+
+    #[test]
+    fn test_plugin_not_activated_error() {
+        // mimo2codex error pattern
+        let body = r#"{"error":{"code":"plugin_disabled","message":"webSearchEnabled is false, please enable Web Search Plugin"}}"#;
+        let result = EnhancedError::detect_web_search_disabled(body);
+        assert!(result.is_some());
+        let error = result.unwrap();
+        assert_eq!(error.code, "web_search_plugin_not_activated");
     }
 }

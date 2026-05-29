@@ -7,6 +7,8 @@
 
 #![allow(dead_code)]
 
+pub mod deepseek;
+pub mod minimax;
 pub mod openai;
 pub mod presets;
 pub mod trait_;
@@ -21,6 +23,8 @@ pub mod error_enhancer;
 pub mod generic_provider;
 
 // Re-export legacy types
+pub use deepseek::DeepSeekProvider;
+pub use minimax::MiniMaxProvider;
 pub use openai::OpenAIProvider;
 pub use presets::{apply_enhance_error_preset, get_provider_presets, match_preset, ProviderPreset, ProviderSpec, ProviderFeatures};
 pub use trait_::{LLMProvider, StreamingChat, StreamingResponses};

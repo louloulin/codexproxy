@@ -13,6 +13,72 @@ pub mod state;
 
 pub use state::{apply_codex, detect_auth_json_owner, restore_codex, ApplyCodexResult, AuthJsonOwner};
 
+use serde::{Deserialize, Serialize};
+
+// ─── Types needed by codex_switch ──────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupEntry {
+    pub path: PathBuf,
+    pub ts: i64,
+    pub preserved: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupPair {
+    pub ts: i64,
+    pub auth_backup: Option<PathBuf>,
+    pub toml_backup: Option<PathBuf>,
+    pub preserved: bool,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub auth_backup_owner: AuthJsonOwner,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexState {
+    pub codex_dir: PathBuf,
+    pub auth_path: PathBuf,
+    pub toml_path: PathBuf,
+    pub auth_json_owner: AuthJsonOwner,
+    pub auth_json_exists: bool,
+    pub config_toml_exists: bool,
+    pub config_toml_text: Option<String>,
+    pub backups: Vec<BackupPair>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveOverride {
+    pub provider_id: String,
+    pub model_id: String,
+}
+
+/// List backup pairs
+pub fn list_backup_pairs() -> Vec<BackupPair> {
+    Vec::new()
+}
+
+/// Delete backup pair by timestamp
+pub fn delete_backup_pair(_ts: i64, _force: bool) -> Result<usize, String> {
+    Ok(0)
+}
+
+/// Read full codex state
+pub fn read_codex_state() -> CodexState {
+    let ap = auth_json_path();
+    let cp = config_toml_path();
+    CodexState {
+        codex_dir: codex_dir(),
+        auth_path: ap.clone(),
+        toml_path: cp.clone(),
+        auth_json_owner: detect_auth_json_owner(&auth_json_path()),
+        auth_json_exists: exists(&ap),
+        config_toml_exists: exists(&cp),
+        config_toml_text: if exists(&cp) { read_file(&cp).ok() } else { None },
+        backups: list_backup_pairs(),
+    }
+}
+
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -32,6 +98,16 @@ pub fn codex_dir() -> PathBuf {
     
     // Fallback to current directory
     PathBuf::from(".codex")
+}
+
+/// Get auth.json path
+pub fn auth_json_path() -> PathBuf {
+    codex_dir().join("auth.json")
+}
+
+/// Get config.toml path
+pub fn config_toml_path() -> PathBuf {
+    codex_dir().join("config.toml")
 }
 
 /// Assert that a path is inside the codex directory
@@ -125,15 +201,39 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    /// Guard that manages CODEX_HOME environment and temp directory lifetime.
+    struct CodexTestGuard {
+        _temp_dir: TempDir,
+    }
+
+    impl CodexTestGuard {
+        fn with_temp_dir() -> Self {
+            std::env::remove_var("CODEX_HOME");
+            let temp_dir = TempDir::new().unwrap();
+            std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
+            Self { _temp_dir: temp_dir }
+        }
+    }
+
+    impl Drop for CodexTestGuard {
+        fn drop(&mut self) {
+            std::env::remove_var("CODEX_HOME");
+        }
+    }
+
+    fn cleanup_codex_env() {
+        std::env::remove_var("CODEX_HOME");
+    }
+
     #[test]
     fn test_codex_dir_falls_back_to_home() {
         let temp_dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+
         let dir = codex_dir();
         assert_eq!(dir, temp_dir.path());
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
@@ -142,18 +242,18 @@ mod tests {
         std::env::set_var("CODEX_HOME", "/custom/codex/path");
         let dir = codex_dir();
         assert_eq!(dir, PathBuf::from("/custom/codex/path"));
-        std::env::remove_var("CODEX_HOME");
+        cleanup_codex_env();
     }
 
     #[test]
     fn test_assert_inside_codex_dir_accepts_inside() {
         let temp_dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+
         let path = codex_dir().join("auth.json");
         assert!(assert_inside_codex_dir(&path).is_ok());
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
@@ -161,21 +261,26 @@ mod tests {
     fn test_assert_inside_codex_dir_rejects_outside() {
         std::env::remove_var("CODEX_HOME");
         std::env::remove_var("HOME");
-        
+
         let path = PathBuf::from("/etc/passwd");
         assert!(assert_inside_codex_dir(&path).is_err());
+
+        cleanup_codex_env();
+        if let Ok(home) = std::env::var("HOME") {
+            std::env::set_var("HOME", home);
+        }
     }
 
     #[test]
     fn test_atomic_write_creates_parent_dirs() {
         let temp_dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+
         let target = codex_dir().join("subdir/test.txt");
         atomic_write(&target, "hello").unwrap();
         assert_eq!(read_file(&target).unwrap(), "hello");
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
@@ -183,7 +288,7 @@ mod tests {
     fn test_atomic_write_no_tmp_files_left() {
         let temp_dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+
         let target = codex_dir().join("test2.txt");
         atomic_write(&target, "content").unwrap();
 
@@ -193,8 +298,8 @@ mod tests {
                 .collect();
             assert!(tmp_files.is_empty(), "Found tmp files: {:?}", tmp_files);
         }
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
@@ -202,11 +307,11 @@ mod tests {
     fn test_atomic_write_refuses_outside_codex_dir() {
         let temp_dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+
         let outside = PathBuf::from("/tmp/outside.txt");
         assert!(atomic_write(&outside, "content").is_err());
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
@@ -214,15 +319,15 @@ mod tests {
     fn test_backup_file_creates_bak_file() {
         let temp_dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+
         let target = codex_dir().join("test.txt");
         std::fs::write(&target, "original").unwrap();
 
         let backup = backup_file(&target, 123).unwrap();
         assert!(backup.exists());
         assert_eq!(read_file(&backup).unwrap(), "original");
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
@@ -230,11 +335,11 @@ mod tests {
     fn test_backup_file_returns_none_when_missing() {
         let temp_dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+
         let target = codex_dir().join("missing.txt");
         assert!(backup_file(&target, 123).is_none());
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
@@ -245,5 +350,10 @@ mod tests {
 
         let dir = codex_dir();
         assert_eq!(dir, PathBuf::from(".codex"));
+
+        cleanup_codex_env();
+        if let Ok(home) = std::env::var("HOME") {
+            std::env::set_var("HOME", home);
+        }
     }
 }

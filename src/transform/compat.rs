@@ -34,7 +34,7 @@ impl CompatOptions {
             ..Default::default()
         }
     }
-    
+
     fn is_on(&self, feature: &str) -> bool {
         match feature {
             "drop_null_content" => self.drop_null_content || self.minimax_compat,
@@ -47,15 +47,15 @@ impl CompatOptions {
             _ => false,
         }
     }
-    
+
     fn is_any_on(&self) -> bool {
         self.drop_null_content
-        || self.drop_tool_choice_auto
-        || self.drop_stream_options
-        || self.drop_parallel_tool_calls
-        || self.merge_system_messages
-        || self.drop_response_format
-        || self.drop_non_function_tools
+            || self.drop_tool_choice_auto
+            || self.drop_stream_options
+            || self.drop_parallel_tool_calls
+            || self.merge_system_messages
+            || self.drop_response_format
+            || self.drop_non_function_tools
     }
 }
 
@@ -64,31 +64,31 @@ pub fn apply_compat(chat: &mut ChatRequest, opts: &CompatOptions) {
     if !opts.minimax_compat && !opts.is_any_on() {
         return;
     }
-    
+
     if opts.is_on("drop_null_content") {
         drop_null_content(chat);
     }
-    
+
     if opts.is_on("drop_tool_choice_auto") {
         drop_tool_choice_auto(chat);
     }
-    
+
     if opts.is_on("drop_stream_options") {
         chat.stream_options = None;
     }
-    
+
     if opts.is_on("drop_parallel_tool_calls") {
         chat.parallel_tool_calls = false;
     }
-    
+
     if opts.is_on("merge_system_messages") {
         merge_system_messages(&mut chat.messages);
     }
-    
+
     if opts.is_on("drop_response_format") {
         chat.response_format = None;
     }
-    
+
     if opts.is_on("drop_non_function_tools") {
         drop_non_function_tools(chat);
     }
@@ -108,10 +108,10 @@ fn merge_system_messages(messages: &mut Vec<Message>) {
     if messages.is_empty() {
         return;
     }
-    
+
     let mut system_contents: Vec<String> = Vec::new();
     let mut non_system_messages: Vec<Message> = Vec::new();
-    
+
     for msg in messages.drain(..) {
         if msg.role == "system" {
             if let Some(ref content) = msg.content {
@@ -123,7 +123,7 @@ fn merge_system_messages(messages: &mut Vec<Message>) {
             non_system_messages.push(msg);
         }
     }
-    
+
     if !system_contents.is_empty() {
         let merged_content = system_contents.join("\n\n");
         let system_msg = Message {
@@ -132,8 +132,9 @@ fn merge_system_messages(messages: &mut Vec<Message>) {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         };
-        
+
         let mut final_messages = vec![system_msg];
         final_messages.extend(non_system_messages);
         *messages = final_messages;
@@ -147,7 +148,7 @@ fn drop_non_function_tools(chat: &mut ChatRequest) {
         tools.retain(|tool| {
             tool.tool_type == "function" || tool.tool_type == "custom"
         });
-        
+
         if tools.is_empty() {
             chat.tools = None;
         }
@@ -180,7 +181,7 @@ mod tests {
             ..Default::default()
         }
     }
-    
+
     impl Default for ChatRequest {
         fn default() -> Self {
             ChatRequest {
@@ -204,6 +205,8 @@ mod tests {
                 tools: None,
                 tool_choice: None,
                 parallel_tool_calls: true,
+                reasoning_effort: None,
+                thinking: None,
             }
         }
     }
@@ -211,16 +214,16 @@ mod tests {
     #[test]
     fn test_drop_tool_choice_auto() {
         let mut chat = create_test_chat(Some(crate::models::chat::ToolChoice::String("auto".to_string())));
-        
+
         let opts = CompatOptions {
             drop_tool_choice_auto: true,
             ..Default::default()
         };
-        
+
         apply_compat(&mut chat, &opts);
         assert!(chat.tool_choice.is_none());
     }
-    
+
     #[test]
     fn test_merge_system_messages() {
         let mut messages = vec![
@@ -230,6 +233,7 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             },
             Message {
                 role: "system".to_string(),
@@ -237,6 +241,7 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             },
             Message {
                 role: "system".to_string(),
@@ -244,17 +249,18 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             },
         ];
-        
+
         merge_system_messages(&mut messages);
-        
+
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "system");
         assert!(messages[0].content.as_ref().unwrap().contains("System 1"));
         assert!(messages[0].content.as_ref().unwrap().contains("System 2"));
     }
-    
+
     #[test]
     fn test_minimax_compat_options() {
         let opts = CompatOptions::minimax_compat();
@@ -265,11 +271,14 @@ mod tests {
 }
 
 // Additional tests matching mimo2codex/test/minimaxCompat.test.ts
+#[cfg(test)]
+mod minimax_compat_tests {
+    use super::*;
 
     #[test]
     fn test_minimax_compat_merges_system_messages() {
         use crate::models::chat::{ChatRequest, Message};
-        
+
         let mut chat = ChatRequest::default();
         chat.messages = vec![
             Message {
@@ -278,6 +287,7 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             },
             Message {
                 role: "user".to_string(),
@@ -285,6 +295,7 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             },
             Message {
                 role: "system".to_string(),
@@ -292,64 +303,64 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             },
         ];
-        
+
         let opts = CompatOptions::minimax_compat();
         apply_compat(&mut chat, &opts);
-        
+
         // Should have 2 messages: one merged system and one user
         let system_count = chat.messages.iter().filter(|m| m.role == "system").count();
         assert_eq!(system_count, 1);
-        
+
         // System message should contain both contents
         let system_msg = chat.messages.iter().find(|m| m.role == "system").unwrap();
         assert!(system_msg.content.as_ref().unwrap().contains("System 1"));
         assert!(system_msg.content.as_ref().unwrap().contains("System 2"));
     }
-    
+
     #[test]
     fn test_minimax_compat_drops_tool_choice_auto() {
         use crate::models::chat::{ChatRequest, Message, ToolChoice};
-        
+
         let mut chat = ChatRequest::default();
-        chat.messages = vec![
-            Message {
-                role: "user".to_string(),
-                content: Some("Hello".to_string()),
-                name: None,
-                tool_calls: None,
-                tool_call_id: None,
-            },
-        ];
+        chat.messages = vec![Message {
+            role: "user".to_string(),
+            content: Some("Hello".to_string()),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+            reasoning_content: None,
+        }];
         chat.tool_choice = Some(ToolChoice::String("auto".to_string()));
-        
+
         let opts = CompatOptions::minimax_compat();
         apply_compat(&mut chat, &opts);
-        
+
         // tool_choice should be removed when set to "auto"
         assert!(chat.tool_choice.is_none());
     }
-    
+
     #[test]
     fn test_minimax_compat_preserves_tool_choice_named() {
         use crate::models::chat::{ChatRequest, Message, ToolChoice};
-        
+
         let mut chat = ChatRequest::default();
-        chat.messages = vec![
-            Message {
-                role: "user".to_string(),
-                content: Some("Hello".to_string()),
-                name: None,
-                tool_calls: None,
-                tool_call_id: None,
-            },
-        ];
+        chat.messages = vec![Message {
+            role: "user".to_string(),
+            content: Some("Hello".to_string()),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+            reasoning_content: None,
+        }];
         chat.tool_choice = Some(ToolChoice::String("my_function".to_string()));
-        
+
         let opts = CompatOptions::minimax_compat();
         apply_compat(&mut chat, &opts);
-        
+
         // Named tool_choice should be preserved
         assert!(chat.tool_choice.is_some());
     }
+}

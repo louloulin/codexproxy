@@ -109,7 +109,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let temp_dir = std::env::temp_dir().join(format!("openai-proxy-log-test-{unique}"));
+        let temp_dir = std::env::temp_dir().join(format!("rcodex-log-test-{unique}"));
         let log_path = temp_dir.join("nested/server.log");
         fs::create_dir_all(log_path.parent().unwrap()).unwrap();
         fs::write(&log_path, "old log contents").unwrap();

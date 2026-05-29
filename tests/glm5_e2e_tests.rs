@@ -8,11 +8,11 @@
 //! - /v1/responses path
 //! - Capability boundaries
 
-use openai_proxy::models::response::{
+use rcodex::models::response::{
     ResponsesRequest, Item, ContentBlock, InputText, MessageItem,
     Tool as ResponsesTool, ReasoningSettings, ReasoningEffort, StructuredOutput,
 };
-use openai_proxy::protocol::capabilities::{FallbackMode, ProviderCapabilities, ResponsesExecutionPlan};
+use rcodex::protocol::capabilities::{FallbackMode, ProviderCapabilities, ResponsesExecutionPlan};
 
 // Helper to create a basic ResponsesRequest for GLM-5
 fn make_glm5_responses_request() -> ResponsesRequest {

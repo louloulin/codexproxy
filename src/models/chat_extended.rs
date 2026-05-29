@@ -348,6 +348,7 @@ impl ExtendedMessage {
                     .collect()
             }),
             tool_call_id: self.tool_call_id.clone(),
+            reasoning_content: None,
         }
     }
 

@@ -99,8 +99,9 @@ mod tests {
     fn test_proxy_creation() {
         let proxy = CodexProxy::new()
             .with_mimo("test-api-key");
-        
-        assert!(proxy.supports_model("mimo-mini"));
+
+        assert!(proxy.supports_model("mimo-v2-mini"));
+        assert!(proxy.supports_model("mimo-v2-pro"));
         assert!(proxy.supports_model("mini")); // alias
     }
 
@@ -108,22 +109,22 @@ mod tests {
     fn test_available_models() {
         let proxy = CodexProxy::new()
             .with_mimo("test-api-key");
-        
+
         let models = proxy.available_models();
         assert!(!models.is_empty());
-        assert!(models.contains(&"mimo-mini".to_string()));
+        assert!(models.contains(&"mimo-v2-mini".to_string()));
     }
 
     #[test]
     fn test_model_info() {
         let proxy = CodexProxy::new()
             .with_mimo("test-api-key");
-        
-        let info = proxy.get_model_info("mimo-mini");
+
+        let info = proxy.get_model_info("mimo-v2-mini");
         assert!(info.is_some());
-        
+
         let info = info.unwrap();
-        assert_eq!(info.id, "mimo-mini");
+        assert_eq!(info.id, "mimo-v2-mini");
         assert!(info.features.streaming);
         assert!(info.features.function_calling);
     }

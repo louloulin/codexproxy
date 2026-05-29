@@ -58,19 +58,144 @@ pub fn init_database(db_path: &Path) -> Result<Connection> {
         "CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at)",
         [],
     )?;
-    
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_requests_provider ON requests(provider)",
         [],
     )?;
-    
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_last_activity ON sessions(last_activity_at)",
         [],
     )?;
-    
+
+    // Auth tables: users, sessions, api keys
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            email TEXT,
+            avatar_url TEXT,
+            password_hash TEXT,
+            is_admin INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            key_prefix TEXT NOT NULL,
+            key_hash TEXT NOT NULL,
+            scopes TEXT DEFAULT 'api',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            last_used_at TEXT,
+            revoked_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS upstream_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            provider_id TEXT NOT NULL,
+            encrypted_key TEXT NOT NULL,
+            key_prefix TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(user_id, provider_id)
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS custom_models (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_id TEXT NOT NULL,
+            upstream_id TEXT NOT NULL,
+            display_name TEXT,
+            context_window INTEGER,
+            max_output_tokens INTEGER,
+            is_builtin INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(provider_id, upstream_id)
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS oauth_clients (
+            provider TEXT PRIMARY KEY,
+            client_id TEXT NOT NULL,
+            client_secret TEXT,
+            callback_url TEXT NOT NULL,
+            enabled INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS codex_config_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            provider_id TEXT,
+            model_id TEXT,
+            auth_backup_path TEXT,
+            config_backup_path TEXT,
+            preserved INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    // Indexes for auth tables
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_api_keys_hash ON user_api_keys(key_hash)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_api_keys_user ON user_api_keys(user_id)",
+        [],
+    )?;
+
     tracing::info!("Database initialized at {:?}", db_path);
-    
+
     Ok(conn)
 }
 

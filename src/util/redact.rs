@@ -9,17 +9,17 @@ pub fn redact_sensitive(input: &str) -> String {
     
     // Redact sk-* API keys (but do sk-ant-* first to catch anthropic keys)
     // Pattern: sk-ant-* (Anthropic keys)
-    if let Ok(re) = regex_lite::Regex::new("sk-ant-[a-zA-Z0-9_-]{10,}") {
+    if let Ok(re) = regex::Regex::new("sk-ant-[a-zA-Z0-9_-]{10,}") {
         result = re.replace_all(&result, "sk-ant-<redacted>").to_string();
     }
     
     // Pattern: sk-* (generic API keys)
-    if let Ok(re) = regex_lite::Regex::new("sk-[a-zA-Z0-9_-]{10,}") {
+    if let Ok(re) = regex::Regex::new("sk-[a-zA-Z0-9_-]{10,}") {
         result = re.replace_all(&result, "sk-<redacted>").to_string();
     }
     
     // Redact Bearer tokens
-    if let Ok(re) = regex_lite::Regex::new(r#"(Bearer\s+)([^\s"'`,\x00-\x1F]+)"#) {
+    if let Ok(re) = regex::Regex::new(r#"(Bearer\s+)([^\s"'`,\x00-\x1F]+)"#) {
         result = re.replace_all(&result, "$1{redacted}").to_string();
         result = result.replace("{redacted}", "<redacted>");
     }

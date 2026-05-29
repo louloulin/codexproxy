@@ -8,13 +8,13 @@
 //! - Tool/function calling in Responses format
 //! - Streaming event completeness
 
-use openai_proxy::models::response::{
+use rcodex::models::response::{
     ContentBlock, InputText, Item,
     MessageItem, ResponsesRequest, Tool as ResponsesTool,
     ReasoningSettings, ReasoningEffort,
 };
-use openai_proxy::protocol::capabilities::{FallbackMode, ProviderCapabilities, ResponsesExecutionPlan};
-use openai_proxy::protocol::canonical::CanonicalToolType;
+use rcodex::protocol::capabilities::{FallbackMode, ProviderCapabilities, ResponsesExecutionPlan};
+use rcodex::protocol::canonical::CanonicalToolType;
 
 // Helper to create a basic ResponsesRequest
 fn make_responses_request(model: &str) -> ResponsesRequest {
@@ -122,7 +122,7 @@ mod tool_preservation_tests {
         ResponsesTool {
             tool_type: tool_type.to_string(),
             function: if tool_type == "function" {
-                Some(openai_proxy::models::response::FunctionDefinition {
+                Some(rcodex::models::response::FunctionDefinition {
                     name: Some("get_weather".to_string()),
                     description: Some("Get weather for a location".to_string()),
                     parameters: Some(serde_json::json!({
@@ -222,7 +222,7 @@ mod previous_response_id_tests {
 
     #[test]
     fn test_previous_response_id_preserved_in_canonical() {
-        let request = openai_proxy::protocol::canonical::CanonicalRequest {
+        let request = rcodex::protocol::canonical::CanonicalRequest {
             model: "gpt-4o".to_string(),
             instructions: None,
             input: vec![],
@@ -279,7 +279,7 @@ mod reasoning_tests {
 
     #[test]
     fn test_reasoning_preserved_in_canonical() {
-        let request = openai_proxy::protocol::canonical::CanonicalRequest {
+        let request = rcodex::protocol::canonical::CanonicalRequest {
             model: "gpt-4o".to_string(),
             instructions: None,
             input: vec![],
@@ -336,7 +336,7 @@ mod structured_output_tests {
 
     #[test]
     fn test_structured_output_preserved_in_canonical() {
-        let request = openai_proxy::protocol::canonical::CanonicalRequest {
+        let request = rcodex::protocol::canonical::CanonicalRequest {
             model: "gpt-4o".to_string(),
             instructions: None,
             input: vec![],
@@ -348,7 +348,7 @@ mod structured_output_tests {
             max_tokens: None,
             seed: None,
             reasoning: None,
-            structured_output: Some(openai_proxy::models::response::StructuredOutput {
+            structured_output: Some(rcodex::models::response::StructuredOutput {
                 schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -417,7 +417,7 @@ mod canonical_model_tests {
         ResponsesTool {
             tool_type: tool_type.to_string(),
             function: if tool_type == "function" {
-                Some(openai_proxy::models::response::FunctionDefinition {
+                Some(rcodex::models::response::FunctionDefinition {
                     name: Some("get_weather".to_string()),
                     description: Some("Get weather".to_string()),
                     parameters: None,
@@ -455,7 +455,7 @@ mod canonical_model_tests {
             ..make_responses_request("gpt-4o")
         };
 
-        let canonical = openai_proxy::protocol::canonical::CanonicalRequest::from_responses_request(&responses_req);
+        let canonical = rcodex::protocol::canonical::CanonicalRequest::from_responses_request(&responses_req);
 
         assert_eq!(canonical.model, "gpt-4o");
         assert_eq!(canonical.instructions, Some("You are helpful.".to_string()));
@@ -465,7 +465,7 @@ mod canonical_model_tests {
 
     #[test]
     fn test_canonical_roundtrip() {
-        use openai_proxy::protocol::canonical::CanonicalRequest;
+        use rcodex::protocol::canonical::CanonicalRequest;
 
         let original = CanonicalRequest {
             model: "gpt-4o".to_string(),

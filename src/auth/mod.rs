@@ -1,8 +1,8 @@
 //!
 //! Authentication Module
-//! 
+//!
 //! Rust implementation with tests aligned to mimo2codex auth.flow.test.ts
-//! 
+//!
 //! Features:
 //! - Auth mode: "off" (local mode) vs "on" (authenticated)
 //! - Session management
@@ -11,10 +11,16 @@
 //! - User /me endpoints
 
 pub mod me;
+pub mod handlers;
 
 use serde::{Deserialize, Serialize};
 
 pub use me::{ApiKeyInfo, MeResponse, UserProfile, UserSettings, build_me_response, get_user_profile, get_user_settings, list_api_keys};
+pub use handlers::{
+    AuthState, LoginRequest, LoginResponse, UserSummary, RegisterRequest,
+    CreateApiKeyRequest, CreateApiKeyResponse,
+    login, register, logout, get_me, create_api_key, revoke_api_key,
+};
 
 /// Authentication mode
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

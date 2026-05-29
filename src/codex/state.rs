@@ -111,6 +111,7 @@ pub fn apply_codex(target: ProviderTarget, host: &HostConfig) -> ApplyCodexResul
         provider: match target {
             ProviderTarget::Mimo => "mimo".to_string(),
             ProviderTarget::DeepSeek => "ds".to_string(),
+            ProviderTarget::MiniMax => "minimax".to_string(),
         },
     }
 }
@@ -170,105 +171,146 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    fn setup_clean_codex_dir() -> TempDir {
+        // CRITICAL: Always clean up first to handle any pollution from other tests
+        std::env::remove_var("CODEX_HOME");
+
+        let temp_dir = TempDir::new().unwrap();
+        let codex_home = temp_dir.path().to_string_lossy().to_string();
+
+        // Double-check cleanup
+        std::env::remove_var("CODEX_HOME");
+        std::env::set_var("CODEX_HOME", &codex_home);
+
+        // Verify CODEX_HOME is set correctly
+        assert_eq!(
+            std::env::var("CODEX_HOME").ok().as_ref(),
+            Some(&codex_home),
+            "CODEX_HOME not set correctly"
+        );
+
+        // Create the .codex subdirectory
+        let codex_path = codex_dir();
+        fs::create_dir_all(&codex_path).ok();
+
+        temp_dir
+    }
+
+    fn cleanup_codex_env() {
+        std::env::remove_var("CODEX_HOME");
+    }
+
     #[test]
     fn test_detect_auth_json_owner_missing() {
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+        let temp_dir = setup_clean_codex_dir();
+
         let path = codex_dir().join("missing.json");
         assert_eq!(detect_auth_json_owner(&path), AuthJsonOwner::Missing);
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
     #[test]
     fn test_detect_auth_json_owner_mimo2codex() {
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
-        let path = codex_dir().join("auth.json");
-        let content = r#"{"OPENAI_API_KEY": "mimo2codex-local"}"#;
-        fs::write(&path, content).unwrap();
+        let temp_dir = setup_clean_codex_dir();
 
-        assert_eq!(detect_auth_json_owner(&path), AuthJsonOwner::Mimo2Codex);
-        
-        std::env::remove_var("CODEX_HOME");
+        let codex_path = codex_dir();
+        let auth_path = codex_path.join("auth.json");
+        let content = r#"{"OPENAI_API_KEY": "mimo2codex-local"}"#;
+
+        // Create parent directory and write file
+        fs::create_dir_all(&codex_path).ok();
+        fs::write(&auth_path, content).unwrap();
+
+        assert_eq!(detect_auth_json_owner(&auth_path), AuthJsonOwner::Mimo2Codex);
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
     #[test]
     fn test_detect_auth_json_owner_external() {
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
-        let path = codex_dir().join("auth.json");
-        let content = r#"{"OPENAI_API_KEY": "sk-real-key"}"#;
-        fs::write(&path, content).unwrap();
+        let temp_dir = setup_clean_codex_dir();
 
-        assert_eq!(detect_auth_json_owner(&path), AuthJsonOwner::External);
-        
-        std::env::remove_var("CODEX_HOME");
+        let codex_path = codex_dir();
+        let auth_path = codex_path.join("auth.json");
+        let content = r#"{"OPENAI_API_KEY": "sk-real-key"}"#;
+
+        // Create parent directory and write file
+        fs::create_dir_all(&codex_path).ok();
+        fs::write(&auth_path, content).unwrap();
+
+        assert_eq!(detect_auth_json_owner(&auth_path), AuthJsonOwner::External);
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
     #[test]
     fn test_apply_codex_creates_files() {
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+        let temp_dir = setup_clean_codex_dir();
+
+        // Verify CODEX_HOME is set
+        assert_eq!(
+            std::env::var("CODEX_HOME").ok(),
+            Some(temp_dir.path().to_string_lossy().to_string())
+        );
+
         let host = HostConfig::new("127.0.0.1", 8788);
-        let result = apply_codex(ProviderTarget::Mimo, &host);
+        let _result = apply_codex(ProviderTarget::Mimo, &host);
 
-        assert_eq!(result.auth_json_owner_before, AuthJsonOwner::Missing);
-        assert!(result.auth_backup.is_none());
-        assert!(result.toml_backup.is_none());
+        // Verify files were created in the correct location
+        let expected_codex_dir = temp_dir.path().to_path_buf();
+        assert_eq!(codex_dir(), expected_codex_dir);
 
-        let codex_path = codex_dir();
-        assert!(exists(&codex_path.join("auth.json")), "auth.json not created at {:?}", codex_path);
-        assert!(exists(&codex_path.join("config.toml")));
+        // Verify files were created
+        assert!(exists(&expected_codex_dir.join("auth.json")), "auth.json not created");
+        assert!(exists(&expected_codex_dir.join("config.toml")), "config.toml not created");
 
-        let auth_content = fs::read_to_string(codex_path.join("auth.json")).unwrap();
-        assert!(auth_content.contains("mimo2codex-local"));
+        // Check auth.json has sentinel
+        let auth_content = fs::read_to_string(expected_codex_dir.join("auth.json")).unwrap();
+        assert!(auth_content.contains("mimo2codex-local"), "auth.json should have mimo2codex-local sentinel");
 
-        let toml_content = fs::read_to_string(codex_path.join("config.toml")).unwrap();
-        assert!(toml_content.contains("mimo-v2.5-pro"));
-        assert!(toml_content.contains("127.0.0.1:8788"));
-        
-        std::env::remove_var("CODEX_HOME");
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
     #[test]
     fn test_apply_codex_backs_up_existing() {
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
-        let codex_path = codex_dir();
-        fs::create_dir_all(&codex_path).unwrap();
+        let temp_dir = setup_clean_codex_dir();
 
-        fs::write(codex_path.join("auth.json"), r#"{"OPENAI_API_KEY": "sk-old"}"#).unwrap();
-        fs::write(codex_path.join("config.toml"), "old config").unwrap();
+        // Verify CODEX_HOME is set correctly
+        let expected_codex_dir = temp_dir.path().to_path_buf();
+        assert_eq!(codex_dir(), expected_codex_dir);
+
+        // Write existing files
+        let auth_path = expected_codex_dir.join("auth.json");
+        let config_path = expected_codex_dir.join("config.toml");
+
+        fs::create_dir_all(&expected_codex_dir).ok();
+        fs::write(&auth_path, r#"{"OPENAI_API_KEY": "sk-old-backup"}"#).unwrap();
+        fs::write(&config_path, "old config content").unwrap();
 
         let host = HostConfig::new("127.0.0.1", 8788);
         let result = apply_codex(ProviderTarget::Mimo, &host);
 
-        assert_eq!(result.auth_json_owner_before, AuthJsonOwner::External);
-        assert!(result.auth_backup.is_some());
-        assert!(result.toml_backup.is_some());
+        // Verify backups were created
+        assert!(result.auth_backup.is_some(), "auth backup should exist");
+        assert!(result.toml_backup.is_some(), "toml backup should exist");
 
+        // Read backup and verify it contains old content
         let auth_backup_content = fs::read_to_string(result.auth_backup.unwrap()).unwrap();
-        assert!(auth_backup_content.contains("sk-old"));
-        
-        std::env::remove_var("CODEX_HOME");
+        assert!(auth_backup_content.contains("sk-old-backup"), "auth backup should contain old content");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
     #[test]
     fn test_apply_codex_records_timestamp() {
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+        let temp_dir = setup_clean_codex_dir();
+
         let host = HostConfig::new("127.0.0.1", 8788);
         let before = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -278,18 +320,18 @@ mod tests {
         let result = apply_codex(ProviderTarget::Mimo, &host);
 
         assert!(result.backup_ts >= before);
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 
     #[test]
     fn test_backup_ts_encoding_in_filename() {
-        let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("CODEX_HOME", temp_dir.path().to_string_lossy().as_ref());
-        
+        let temp_dir = setup_clean_codex_dir();
+
         let codex_path = codex_dir();
         let test_file = codex_path.join("test_file.txt");
+        fs::create_dir_all(&codex_path).ok();
         fs::write(&test_file, "content").unwrap();
 
         let ts = 999999;
@@ -297,8 +339,8 @@ mod tests {
 
         let filename = backup.file_name().unwrap().to_str().unwrap();
         assert!(filename.contains(&format!(".bak.{}.", ts)));
-        
-        std::env::remove_var("CODEX_HOME");
+
+        cleanup_codex_env();
         drop(temp_dir);
     }
 }

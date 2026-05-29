@@ -625,6 +625,7 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             }],
             temperature: None,
             top_p: None,
@@ -647,6 +648,8 @@ mod tests {
             }]),
             tool_choice: None,
             parallel_tool_calls: true,
+            reasoning_effort: None,
+            thinking: None,
         };
 
         let body = serde_json::to_value(&request).unwrap();

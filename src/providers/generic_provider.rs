@@ -373,6 +373,11 @@ impl GenericProviderLoader {
     pub fn clear(&mut self) {
         self.providers.clear();
     }
+
+    /// Iterate over all registered providers
+    pub fn iter(&self) -> impl Iterator<Item = &GenericProviderSpec> {
+        self.providers.values()
+    }
 }
 
 impl Default for GenericProviderLoader {

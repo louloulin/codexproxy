@@ -182,6 +182,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             });
         }
     }
@@ -212,6 +213,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 });
             }
             Item::FunctionCall(func) => {
@@ -228,6 +230,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                         },
                     }]),
                     tool_call_id: None,
+                    reasoning_content: None,
                 });
             }
             Item::FunctionCallOutput(output) => {
@@ -237,6 +240,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                     name: None,
                     tool_calls: None,
                     tool_call_id: Some(output.call_id.clone()),
+                    reasoning_content: None,
                 });
             }
             Item::Reasoning(reasoning) => {
@@ -254,6 +258,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                         name: None,
                         tool_calls: None,
                         tool_call_id: None,
+                        reasoning_content: None,
                     });
                 }
             }
@@ -273,6 +278,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                         },
                     }]),
                     tool_call_id: None,
+                    reasoning_content: None,
                 });
             }
             Item::ToolSearchCall(search) => {
@@ -291,6 +297,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                         },
                     }]),
                     tool_call_id: None,
+                    reasoning_content: None,
                 });
             }
             Item::CustomToolCall(custom) => {
@@ -307,6 +314,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                         },
                     }]),
                     tool_call_id: None,
+                    reasoning_content: None,
                 });
             }
             Item::CustomToolCallOutput(output) => {
@@ -331,6 +339,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                     name: None,
                     tool_calls: None,
                     tool_call_id: Some(output.call_id.clone()),
+                    reasoning_content: None,
                 });
             }
             Item::WebSearchCall(web_search) => {
@@ -351,6 +360,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                             },
                         }]),
                         tool_call_id: None,
+                        reasoning_content: None,
                     });
                 }
             }
@@ -372,6 +382,7 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
                     name: None,
                     tool_calls: None,
                     tool_call_id: Some(mcp_output.call_id.clone()),
+                    reasoning_content: None,
                 });
             }
             // Skip other types that don't map to Chat API
@@ -443,6 +454,8 @@ pub fn transform_responses_to_chat_request(responses_req: &ResponsesRequest) -> 
         tools,
         tool_choice,
         parallel_tool_calls: responses_req.parallel_tool_calls.unwrap_or(true),
+        reasoning_effort: None,
+        thinking: None,
     }
 }
 
@@ -557,6 +570,7 @@ pub fn transform_responses_to_chat_response(responses_resp: &ResponsesResponse) 
                         name: None,
                         tool_calls,
                         tool_call_id: None,
+                        reasoning_content: None,
                     },
                     finish_reason: msg.status.clone(),
                     logprobs: None,
@@ -758,6 +772,7 @@ mod tests {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             }],
             temperature: Some(0.7),
             top_p: None,
@@ -777,6 +792,8 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: true,
+            reasoning_effort: None,
+            thinking: None,
         };
 
         let responses_req = transform_chat_to_responses_request(&chat_req);
@@ -900,6 +917,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 finish_reason: Some("stop".to_string()),
                 logprobs: None,
@@ -1055,6 +1073,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 ChatMessage {
                     role: "user".to_string(),
@@ -1062,6 +1081,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
             ],
             temperature: Some(0.7),
@@ -1082,6 +1102,8 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: true,
+            reasoning_effort: None,
+            thinking: None,
         };
 
         // Transform Chat → Responses
@@ -1129,6 +1151,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 finish_reason: Some("stop".to_string()),
                 logprobs: None,

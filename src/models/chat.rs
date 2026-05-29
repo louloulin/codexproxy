@@ -87,6 +87,15 @@ pub struct ChatRequest {
     /// Whether to enable parallel function calling
     #[serde(default = "default_parallel_tool_calls")]
     pub parallel_tool_calls: bool,
+
+    /// Reasoning effort level (low/medium/high) for thinking models
+    /// Maps from Responses API's reasoning.effort
+    #[serde(default)]
+    pub reasoning_effort: Option<ReasoningEffort>,
+
+    /// Thinking configuration for disabling reasoning
+    #[serde(default)]
+    pub thinking: Option<ThinkingConfig>,
 }
 
 impl ChatRequest {
@@ -118,6 +127,7 @@ impl ChatRequest {
                         name: None,
                         tool_calls: None,
                         tool_call_id: None,
+                        reasoning_content: None,
                     });
                 }
                 Item::Reasoning(reasoning) => {
@@ -134,6 +144,7 @@ impl ChatRequest {
                                 name: None,
                                 tool_calls: None,
                                 tool_call_id: None,
+                                reasoning_content: None,
                             });
                         }
                     }
@@ -163,6 +174,8 @@ impl ChatRequest {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: true,
+            reasoning_effort: None,
+            thinking: None,
         }
     }
 }
@@ -177,6 +190,22 @@ fn default_include_usage() -> Option<bool> {
 
 fn default_parallel_tool_calls() -> bool {
     true
+}
+
+/// Reasoning effort level for thinking models (DeepSeek, MiMo, etc.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    Low,
+    Medium,
+    High,
+}
+
+/// Thinking configuration for disabling/enabling reasoning
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThinkingConfig {
+    #[serde(rename = "type")]
+    pub type_: String,
 }
 
 /// Message in the conversation
@@ -200,6 +229,11 @@ pub struct Message {
     /// Tool call ID that this message is responding to
     #[serde(default)]
     pub tool_call_id: Option<String>,
+
+    /// Reasoning content for thinking mode (DeepSeek, MiMo, etc.)
+    /// Contains the full reasoning trace
+    #[serde(default)]
+    pub reasoning_content: Option<String>,
 }
 
 /// Tool that can be called by the model

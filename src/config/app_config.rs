@@ -16,8 +16,14 @@ pub struct ServerConfig {
     pub port: u16,
     #[serde(default = "default_body_limit")]
     pub body_limit: usize,
+    #[serde(default = "default_data_dir")]
+    pub data_dir: String,
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
+}
+
+fn default_data_dir() -> String {
+    "data/db".to_string()
 }
 
 fn default_body_limit() -> usize {
@@ -56,6 +62,7 @@ impl Default for ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 8080,
             body_limit: default_body_limit(),
+            data_dir: default_data_dir(),
             rate_limit: RateLimitConfig::default(),
         }
     }
@@ -66,6 +73,8 @@ pub struct ProvidersConfig {
     #[serde(default)]
     pub openai: Option<ProviderConfig>,
     pub zhipu: ProviderConfig,
+    #[serde(default)]
+    pub minimax: Option<ProviderConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -193,6 +202,18 @@ impl Config {
         if let Ok(api_key) = std::env::var("ZHIPU_API_KEY") {
             self.providers.zhipu.api_key = api_key;
         }
+        if let Ok(api_key) = std::env::var("MINIMAX_API_KEY") {
+            if self.providers.minimax.is_none() {
+                self.providers.minimax = Some(ProviderConfig {
+                    api_key,
+                    base_url: "https://api.minimaxi.com/v1".to_string(),
+                    default_model: "MiniMax-M2.7".to_string(),
+                    timeout: 120,
+                });
+            } else if let Some(ref mut minimax) = self.providers.minimax {
+                minimax.api_key = api_key;
+            }
+        }
     }
 }
 
@@ -213,6 +234,7 @@ impl Default for Config {
                     default_model: "glm-4".to_string(),
                     timeout: 60,
                 },
+                minimax: None,
             },
             routing: RoutingConfig {
                 default: "openai".to_string(),
@@ -234,6 +256,7 @@ impl ProvidersConfig {
         match name {
             "openai" => self.openai.as_ref(),
             "zhipu" => Some(&self.zhipu),
+            "minimax" => self.minimax.as_ref(),
             _ => None,
         }
     }

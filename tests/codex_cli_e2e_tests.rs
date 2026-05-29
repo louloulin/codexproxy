@@ -4,9 +4,9 @@
 //! testing the complete request/response flow.
 
 use bytes::Bytes;
-use openai_proxy::config::Config;
-use openai_proxy::handlers::AppState;
-use openai_proxy::models::streaming::{try_parse_codex_cli_event, CodexCliEvent};
+use rcodex::config::Config;
+use rcodex::handlers::AppState;
+use rcodex::models::streaming::{try_parse_codex_cli_event, CodexCliEvent};
 
 #[cfg(test)]
 mod tests {
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_snapshot_structure() {
-        use openai_proxy::models::streaming::RateLimitSnapshot;
+        use rcodex::models::streaming::RateLimitSnapshot;
 
         let snapshot = RateLimitSnapshot {
             requests_remaining: 100,
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_server_model_event_structure() {
-        use openai_proxy::models::streaming::ResponseEvent;
+        use rcodex::models::streaming::ResponseEvent;
 
         let event = ResponseEvent::ServerModel {
             model: "glm-5.1".to_string(),

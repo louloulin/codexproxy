@@ -162,6 +162,7 @@ pub fn function_call_output_to_chat(item: &FunctionCallOutputItem) -> crate::mod
         name: None,
         tool_call_id: Some(item.call_id.clone()),
         tool_calls: None,
+        reasoning_content: None,
     }
 }
 
@@ -197,6 +198,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 finish_reason: Some("stop".to_string()),
                 logprobs: None,
@@ -304,13 +306,15 @@ mod tests {
     }
 }
 
-    
-    // mimo2codex aligned tests (matching respToResponses.test.ts)
-    
+// mimo2codex aligned tests (matching respToResponses.test.ts)
+#[cfg(test)]
+mod mimmo2codex_aligned_tests {
+    use super::*;
+
     #[test]
     fn test_chat_to_responses_plain_text() {
         use crate::models::chat::{ChatResponse, Choice, Message};
-        
+
         let chat = ChatResponse {
             id: "chatcmpl_123".to_string(),
             object: "chat.completion".to_string(),
@@ -325,6 +329,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 logprobs: None,
             }],
@@ -337,18 +342,18 @@ mod tests {
             finish_reason: None,
             extra: std::collections::HashMap::new(),
         };
-        
+
         let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
         assert_eq!(responses.status, "completed");
         assert_eq!(responses.output.len(), 1);
         assert_eq!(responses.usage.as_ref().unwrap().input_tokens, 10);
         assert_eq!(responses.usage.as_ref().unwrap().output_tokens, 20);
     }
-    
+
     #[test]
     fn test_chat_to_responses_with_reasoning() {
         use crate::models::chat::{ChatResponse, Choice, Message};
-        
+
         let chat = ChatResponse {
             id: "chatcmpl_123".to_string(),
             object: "chat.completion".to_string(),
@@ -363,6 +368,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 logprobs: None,
             }],
@@ -375,18 +381,18 @@ mod tests {
             finish_reason: None,
             extra: std::collections::HashMap::new(),
         };
-        
+
         let mut opts = ChatToResponsesOptions::default();
         opts.expose_reasoning = true;
-        
+
         let responses = chat_to_responses(&chat, &opts);
         assert_eq!(responses.status, "completed");
     }
-    
+
     #[test]
     fn test_chat_to_responses_with_function_call() {
         use crate::models::chat::{ChatResponse, Choice, Message, ToolCall, FunctionCall};
-        
+
         let chat = ChatResponse {
             id: "chatcmpl_456".to_string(),
             object: "chat.completion".to_string(),
@@ -408,6 +414,7 @@ mod tests {
                         },
                     }]),
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 logprobs: None,
             }],
@@ -420,20 +427,20 @@ mod tests {
             finish_reason: None,
             extra: std::collections::HashMap::new(),
         };
-        
+
         let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
         assert_eq!(responses.output.len(), 1);
-        
+
         if let crate::models::response::OutputItem::FunctionCall(fc) = &responses.output[0] {
             assert_eq!(fc.name, "shell");
             assert_eq!(fc.arguments, r#"{"cmd":"ls"}"#);
         }
     }
-    
+
     #[test]
     fn test_chat_to_responses_with_usage() {
         use crate::models::chat::{ChatResponse, Choice, Message};
-        
+
         let chat = ChatResponse {
             id: "chatcmpl_789".to_string(),
             object: "chat.completion".to_string(),
@@ -448,6 +455,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 logprobs: None,
             }],
@@ -460,18 +468,18 @@ mod tests {
             finish_reason: None,
             extra: std::collections::HashMap::new(),
         };
-        
+
         let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
         assert!(responses.usage.is_some());
         assert_eq!(responses.usage.as_ref().unwrap().input_tokens, 100);
         assert_eq!(responses.usage.as_ref().unwrap().output_tokens, 50);
         assert_eq!(responses.usage.as_ref().unwrap().total_tokens, 150);
     }
-    
+
     #[test]
     fn test_chat_to_responses_incomplete() {
         use crate::models::chat::{ChatResponse, Choice, Message};
-        
+
         let chat = ChatResponse {
             id: "chatcmpl_incomplete".to_string(),
             object: "chat.completion".to_string(),
@@ -486,6 +494,7 @@ mod tests {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 },
                 logprobs: None,
             }],
@@ -494,8 +503,8 @@ mod tests {
             finish_reason: None,
             extra: std::collections::HashMap::new(),
         };
-        
+
         let responses = chat_to_responses(&chat, &ChatToResponsesOptions::default());
         assert_eq!(responses.output.len(), 1);
     }
-
+}

@@ -53,6 +53,11 @@ impl RequestRepository {
             conn: Mutex::new(conn),
         }
     }
+
+    /// Get the database connection (for external use)
+    pub fn get_connection(&self) -> Result<std::sync::MutexGuard<'_, Connection>, std::sync::PoisonError<std::sync::MutexGuard<'_, Connection>>> {
+        self.conn.lock()
+    }
     
     /// Log a new request
     pub fn log_request(&self, record: &RequestRecord) -> Result<()> {
@@ -175,9 +180,247 @@ impl RequestRepository {
                 error_message: row.get(7)?,
             })
         })?.collect::<Result<Vec<_>>>()?;
-        
+
         Ok(records)
     }
+
+    /// Get provider health stats (error rate per provider within a time window)
+    pub fn get_provider_health(&self, range_ms: i64) -> Result<Vec<ProviderHealthRow>> {
+        let since = chrono::Utc::now().timestamp_millis() - range_ms;
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT provider,
+                    COUNT(*) as requests,
+                    SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors,
+                    CASE WHEN COUNT(*) = 0 THEN -1.0
+                         ELSE ROUND(100.0 * SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) / COUNT(*), 1)
+                    END as error_rate,
+                    MAX(created_at) as last_seen
+             FROM requests
+             WHERE created_at >= ?1
+             GROUP BY provider
+             ORDER BY requests DESC"
+        )?;
+
+        let rows = stmt.query_map(params![since], |row| {
+            Ok(ProviderHealthRow {
+                provider_id: row.get(0)?,
+                requests: row.get(1)?,
+                errors: row.get(2)?,
+                error_rate: row.get(3)?,
+                last_seen: row.get(4)?,
+            })
+        })?;
+
+        let result = rows.collect::<Result<Vec<_>>>()?;
+        Ok(result)
+    }
+
+    /// Get recent logs with pagination
+    pub fn get_logs(&self, provider: Option<&str>, limit: i32, offset: i32) -> Result<Vec<RequestRecord>> {
+        let conn = self.conn.lock().unwrap();
+
+        let records: Vec<RequestRecord> = if let Some(p) = provider {
+            let mut stmt = conn.prepare(
+                "SELECT id, provider, model, endpoint, status_code, tokens_used, latency_ms, error_message
+                 FROM requests WHERE provider = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
+            )?;
+            let rows = stmt.query_map(params![p, limit, offset], |row| {
+                Ok(RequestRecord {
+                    id: row.get(0)?,
+                    provider: row.get(1)?,
+                    model: row.get(2)?,
+                    endpoint: row.get(3)?,
+                    status_code: row.get(4)?,
+                    tokens_used: row.get(5)?,
+                    latency_ms: row.get(6)?,
+                    error_message: row.get(7)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>>>()?
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT id, provider, model, endpoint, status_code, tokens_used, latency_ms, error_message
+                 FROM requests ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"
+            )?;
+            let rows = stmt.query_map(params![limit, offset], |row| {
+                Ok(RequestRecord {
+                    id: row.get(0)?,
+                    provider: row.get(1)?,
+                    model: row.get(2)?,
+                    endpoint: row.get(3)?,
+                    status_code: row.get(4)?,
+                    tokens_used: row.get(5)?,
+                    latency_ms: row.get(6)?,
+                    error_message: row.get(7)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>>>()?
+        };
+
+        Ok(records)
+    }
+
+    /// Delete logs older than a timestamp
+    pub fn delete_logs_before(&self, before_ts: &str) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let affected = conn.execute(
+            "DELETE FROM requests WHERE created_at < ?1",
+            params![before_ts],
+        )?;
+        Ok(affected)
+    }
+
+    /// Aggregate error stats
+    pub fn aggregate_errors(&self, range: &str) -> Result<Vec<ErrorBucket>> {
+        let conn = self.conn.lock().unwrap();
+        let interval = range_to_seconds(range);
+        let mut stmt = conn.prepare(
+            "SELECT strftime('%Y-%m-%d %H:00:00', created_at) as bucket,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors
+             FROM requests
+             WHERE created_at >= datetime('now', ?1)
+             GROUP BY bucket ORDER BY bucket DESC"
+        )?;
+        let rows = stmt.query_map(params![interval], |row| {
+            Ok(ErrorBucket {
+                bucket: row.get(0)?,
+                total: row.get(1)?,
+                errors: row.get(2)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>>>()
+    }
+
+    /// Aggregate latency stats
+    pub fn aggregate_latency(&self, range: &str) -> Result<LatencyStats> {
+        let conn = self.conn.lock().unwrap();
+        let interval = range_to_seconds(range);
+        let mut stmt = conn.prepare(
+            "SELECT COALESCE(AVG(latency_ms), 0) as avg_ms,
+                    COALESCE(MIN(latency_ms), 0) as min_ms,
+                    COALESCE(MAX(latency_ms), 0) as max_ms,
+                    COUNT(*) as count
+             FROM requests
+             WHERE created_at >= datetime('now', ?1)"
+        )?;
+        stmt.query_row(params![interval], |row| {
+            Ok(LatencyStats {
+                avg_ms: row.get(0)?,
+                min_ms: row.get(1)?,
+                max_ms: row.get(2)?,
+                count: row.get(3)?,
+            })
+        })
+    }
+
+    /// Aggregate token timeseries
+    pub fn aggregate_token_timeseries(&self, range: &str) -> Result<Vec<TokenBucket>> {
+        let conn = self.conn.lock().unwrap();
+        let interval = range_to_seconds(range);
+        let mut stmt = conn.prepare(
+            "SELECT strftime('%Y-%m-%d', created_at) as day,
+                    COALESCE(SUM(tokens_used), 0) as total_tokens,
+                    COUNT(*) as requests
+             FROM requests
+             WHERE created_at >= datetime('now', ?1)
+             GROUP BY day ORDER BY day ASC"
+        )?;
+        let rows = stmt.query_map(params![interval], |row| {
+            Ok(TokenBucket {
+                day: row.get(0)?,
+                total_tokens: row.get(1)?,
+                requests: row.get(2)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>>>()
+    }
+
+    /// Aggregate per-model stats
+    pub fn aggregate_per_model(&self, range: &str) -> Result<Vec<ModelStats>> {
+        let conn = self.conn.lock().unwrap();
+        let interval = range_to_seconds(range);
+        let mut stmt = conn.prepare(
+            "SELECT model, COUNT(*) as requests,
+                    COALESCE(SUM(tokens_used), 0) as total_tokens,
+                    COALESCE(AVG(latency_ms), 0) as avg_latency,
+                    SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors
+             FROM requests
+             WHERE created_at >= datetime('now', ?1)
+             GROUP BY model ORDER BY requests DESC"
+        )?;
+        let rows = stmt.query_map(params![interval], |row| {
+            Ok(ModelStats {
+                model: row.get(0)?,
+                requests: row.get(1)?,
+                total_tokens: row.get(2)?,
+                avg_latency: row.get(3)?,
+                errors: row.get(4)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>>>()
+    }
+}
+
+fn range_to_seconds(range: &str) -> String {
+    match range {
+        "1h" => "-1 hours".to_string(),
+        "6h" => "-6 hours".to_string(),
+        "24h" => "-24 hours".to_string(),
+        "7d" => "-7 days".to_string(),
+        "30d" => "-30 days".to_string(),
+        _ => "-24 hours".to_string(),
+    }
+}
+
+/// Error bucket for aggregate stats
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ErrorBucket {
+    pub bucket: String,
+    pub total: i64,
+    pub errors: i64,
+}
+
+/// Latency statistics
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LatencyStats {
+    pub avg_ms: f64,
+    pub min_ms: i64,
+    pub max_ms: i64,
+    pub count: i64,
+}
+
+/// Token bucket for timeseries
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenBucket {
+    pub day: String,
+    pub total_tokens: i64,
+    pub requests: i64,
+}
+
+/// Per-model statistics
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelStats {
+    pub model: String,
+    pub requests: i64,
+    pub total_tokens: i64,
+    pub avg_latency: f64,
+    pub errors: i64,
+}
+
+/// Provider health statistics row
+#[derive(Debug, Clone)]
+pub struct ProviderHealthRow {
+    pub provider_id: String,
+    pub requests: i64,
+    pub errors: i64,
+    pub error_rate: f64,
+    pub last_seen: Option<String>,
 }
 
 // Extension trait to make rusqlite query_row return Option

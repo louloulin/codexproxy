@@ -3,7 +3,7 @@
 //! These tests verify that Codex CLI events can be correctly parsed
 //! and that the stream state machine works properly.
 
-use openai_proxy::models::streaming::{
+use rcodex::models::streaming::{
     CodexCliEvent, CodexCliStreamState, try_parse_codex_cli_event, is_codex_cli_event,
 };
 
