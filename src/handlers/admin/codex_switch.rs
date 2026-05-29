@@ -78,7 +78,7 @@ pub async fn post_codex_apply(
         }
     };
     
-    let host = crate::setup::HostConfig::new("127.0.0.1", 8080);
+    let host = crate::setup::HostConfig::new("127.0.0.1", 8788);
     let result = crate::codex::apply_codex(target.clone(), &host);
     
     let response = ApplyCodexResponse {

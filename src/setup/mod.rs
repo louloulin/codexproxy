@@ -84,7 +84,7 @@ pub fn build_cc_switch_files(host: &HostConfig, target: &ProviderTarget) -> CcSw
     let (model_provider, model) = match target {
         ProviderTarget::Mimo => ("mimo2codex", "mimo-v2.5-pro"),
         ProviderTarget::DeepSeek => ("mimo2codex", "deepseek-v4-pro"),
-        ProviderTarget::MiniMax => ("CodexPlusPlus", "MiniMax-M2.7"),
+        ProviderTarget::MiniMax => ("mimo2codex", "MiniMax-M2.7"),
     };
     
     let config_toml = format!(
