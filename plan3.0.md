@@ -167,6 +167,12 @@ import { ThunderboltOutlined } from "@ant-design/icons"
 - [x] 导入/导出功能
 - [x] 探针测试 (Probe)
 - [x] MiniMax Provider 支持 (2026-05-29)
+  - ✅ 已验证 MiniMax-M2.7 模型正常工作 (200 OK)
+  - ✅ 支持 reasoning 模式 (输出包含 thinker 内容)
+  - ⚠️ MiniMax-Text-01 需要付费订阅
+- [x] Codex CLI 路由修复 (2026-05-29)
+  - ✅ 修复 config.toml 生成 (port 8788, model_provider "mimo2codex")
+  - ✅ Codex 可通过 rcodex 代理路由到 MiniMax
 
 ### 4.2 待增强功能
 
