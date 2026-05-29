@@ -411,6 +411,12 @@ test('Codex 配置完整流程', async ({ page }) => {
    - ✅ /v1/models 返回 MiniMax 模型
    - ✅ /admin/api/providers 返回 minimax
    - ✅ /admin/api/stats 正确计数
+6. **Responses API 协议转换**: MiniMax 完整支持 (2026-05-29)
+   - ✅ transform_responses_to_chat_request: Responses → Chat
+   - ✅ transform_chat_to_responses_response: Chat → Responses
+   - ✅ transform_chat_stream_to_responses_stream: 流式转换
+   - ✅ Non-streaming: POST /v1/responses 返回标准 Responses 格式
+   - ✅ Streaming: POST /v1/responses?stream=true 返回 SSE events
 
 ### ⚠️ 待完善
 
