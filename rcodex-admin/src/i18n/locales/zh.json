@@ -153,5 +153,39 @@
     "mimo2codex": "mimo2codex",
     "external": "外部",
     "missing": "缺失"
+  },
+  "whatsNew": {
+    "title": "新功能介绍",
+    "subtitle": "查看最新更新内容",
+    "subtitleMulti": "共 {count} 个更新",
+    "kind": {
+      "new": "新功能",
+      "improved": "改进",
+      "fixed": "修复",
+      "doc": "文档"
+    },
+    "location": "位置",
+    "dontShowAgain": "不再显示",
+    "footerHint": "版本信息会在首次启动后显示。可在设置中查看历史更新。"
+  },
+  "keyBanner": {
+    "allOk": "✓ 所有 Provider API Key 已配置",
+    "missingTitle": "API Key 缺失",
+    "missingHint": "以下 Provider 缺少 API Key:",
+    "exampleLabel": "配置示例:",
+    "macLinux": "macOS/Linux",
+    "windows": "Windows"
+  },
+  "dataDir": {
+    "banner": {
+      "title": "需要重启服务",
+      "body": "配置已更新，需要重启服务才能生效。数据目录: {dir}"
+    }
+  },
+  "logs": {
+    "expand": {
+      "notCaptured": "未捕获请求/响应内容",
+      "chars": "{count} 字符"
+    }
   }
 }

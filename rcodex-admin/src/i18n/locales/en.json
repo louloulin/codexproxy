@@ -153,5 +153,39 @@
     "mimo2codex": "mimo2codex",
     "external": "external",
     "missing": "missing"
+  },
+  "whatsNew": {
+    "title": "What's New",
+    "subtitle": "View the latest updates",
+    "subtitleMulti": "{count} updates available",
+    "kind": {
+      "new": "New",
+      "improved": "Improved",
+      "fixed": "Fixed",
+      "doc": "Docs"
+    },
+    "location": "Location",
+    "dontShowAgain": "Don't show again",
+    "footerHint": "Version info appears on first launch. View release history in settings."
+  },
+  "keyBanner": {
+    "allOk": "✓ All Provider API Keys Configured",
+    "missingTitle": "API Key Missing",
+    "missingHint": "The following Providers are missing API Keys:",
+    "exampleLabel": "Configuration Example:",
+    "macLinux": "macOS/Linux",
+    "windows": "Windows"
+  },
+  "dataDir": {
+    "banner": {
+      "title": "Service Restart Required",
+      "body": "Configuration updated. Restart the service for changes to take effect. Data directory: {dir}"
+    }
+  },
+  "logs": {
+    "expand": {
+      "notCaptured": "Request/response body not captured",
+      "chars": "{count} chars"
+    }
   }
 }

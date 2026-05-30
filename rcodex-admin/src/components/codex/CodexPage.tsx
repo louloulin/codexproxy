@@ -1,4 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+/**
+ * CodexPage - Codex 配置管理页面
+ *
+ * 重构后的精简版本，使用拆分出的子组件：
+ * - CurrentStateCard: 当前状态卡片
+ * - ProviderBlock: Provider/Model 选择和测试
+ * - RuntimeOverrideCard: 运行时覆盖
+ * - BackupCard: 备份历史
+ * - HistoryPanel: 配置历史
+ * - ThinkingPanel: 思考模式
+ */
+
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { api } from "@/lib/api"
@@ -7,16 +19,19 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertTriangle } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, CheckCircle, XCircle, RefreshCw, Trash2, RotateCcw, Zap, Download, CloudUpload, CloudDownload } from "lucide-react"
-import type { CodexState, CodexTarget, ProbeResult, BackupPair, CodexHistoryEntry } from "@/types/codex"
+import { Loader2, CheckCircle, XCircle, Trash2, Download, CloudUpload, CloudDownload } from "lucide-react"
+import type { CodexHistoryEntry } from "@/types/codex"
 import { ImportModal, ExportModal } from "./ImportModal"
 import { SetupSnippets } from "./SetupSnippets"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { PageTour, type TourStep } from "@/components/PageTour"
 import { Info, Space } from "lucide-react"
+import { CurrentStateCard } from "./CurrentStateCard"
+import { ProviderBlock } from "./ProviderBlock"
+import { RuntimeOverrideCard } from "./RuntimeOverrideCard"
+import { BackupCard } from "./BackupCard"
 
 // Codex PageTour steps
 const CODEX_TOUR_STEPS: TourStep[] = [
@@ -46,524 +61,7 @@ const CODEX_TOUR_STEPS: TourStep[] = [
   },
 ]
 
-// Download blob helper function
-function downloadBlob(content: string, filename: string, mime = "text/plain"): void {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function CodexStateCard({ state, onRefresh }: { state: CodexState | undefined; onRefresh: () => void }) {
-  const { t } = useTranslation()
-  const [editingDir, setEditingDir] = useState(false)
-  const [dirInput, setDirInput] = useState("")
-  const ownerVariant = state?.authJsonOwner === "mimo2codex" ? "success" : state?.authJsonOwner === "external" ? "warning" : "secondary"
-  const ownerLabel = state?.authJsonOwner === "mimo2codex" ? t("auth.mimo2codex") : state?.authJsonOwner === "external" ? t("auth.external") : t("auth.missing")
-
-  const parseModelProvider = (text: string | null) => {
-    if (!text) return { model: null, provider: null }
-    const modelMatch = /^\s*model\s*=\s*"([^"\n]+)"/m.exec(text)
-    const providerMatch = /^\s*model_provider\s*=\s*"([^"\n]+)"/m.exec(text)
-    return { model: modelMatch?.[1] ?? null, provider: providerMatch?.[1] ?? null }
-  }
-  const parsed = state?.configTomlText ? parseModelProvider(state.configTomlText) : { model: null, provider: null }
-
-  const handleExport = () => {
-    if (state?.configTomlText) {
-      downloadBlob(state.configTomlText, "config.toml", "text/plain")
-    }
-    if (state?.authJsonExists) {
-      api.codex.state().then(s => {
-        if (s.ok && s.data) {
-          downloadBlob(JSON.stringify({ owner: s.data.authJsonOwner }, null, 2), "auth.json", "application/json")
-        }
-      })
-    }
-  }
-
-  const handleSetDir = async () => {
-    if (!dirInput.trim()) return
-    try {
-      await api.codex.setCodexDir(dirInput.trim())
-      setEditingDir(false)
-      onRefresh()
-    } catch (e) {
-      console.error("Failed to set codex dir:", e)
-    }
-  }
-
-  const handleClearDir = async () => {
-    try {
-      await api.codex.clearCodexDir()
-      setEditingDir(false)
-      onRefresh()
-    } catch (e) {
-      console.error("Failed to clear codex dir:", e)
-    }
-  }
-
-  return (
-    <Card data-tour="codex-config">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>{t("codexState.title")}</CardTitle>
-          <CardDescription>{t("codexState.description")}</CardDescription>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport} title={t("codexState.export")}>
-            <Download className="h-4 w-4 mr-1" /> {t("codexState.export")}
-          </Button>
-          <Button variant="outline" size="icon" onClick={onRefresh}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground">{t("codexState.codexDir")}</p>
-            {editingDir ? (
-              <div className="flex gap-2 mt-1">
-                <input
-                  type="text"
-                  value={dirInput}
-                  onChange={(e) => setDirInput(e.target.value)}
-                  placeholder={state?.codexDir}
-                  className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm font-mono"
-                  autoFocus
-                />
-                <Button size="sm" onClick={handleSetDir}>Save</Button>
-                <Button size="sm" variant="outline" onClick={() => setEditingDir(false)}>Cancel</Button>
-                <Button size="sm" variant="ghost" onClick={handleClearDir}>Reset</Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 mt-1">
-                <p className="font-mono text-sm">{state?.codexDir ?? "-"}</p>
-                <Button size="sm" variant="ghost" onClick={() => { setEditingDir(true); setDirInput(state?.codexDir || "") }}>Edit</Button>
-              </div>
-            )}
-            <Badge variant="secondary" className="mt-1">{state?.codexDirSource ?? "default"}</Badge>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">{t("codexState.authOwner")}</p>
-            <Badge variant={ownerVariant as any} className="mt-1">{ownerLabel}</Badge>
-            <p className="text-xs text-muted-foreground mt-1 font-mono truncate">{state?.authPath ?? "-"}</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">{t("codexState.provider")}</p>
-            <Badge variant="outline">{parsed.provider ?? "-"}</Badge>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">{t("codexState.model")}</p>
-            <Badge variant="secondary">{parsed.model ?? "-"}</Badge>
-          </div>
-        </div>
-        <div className="flex gap-4">
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">{t("codexState.configToml")}:</p>
-            {state?.configTomlExists ? (
-              <Badge variant="success">exists</Badge>
-            ) : (
-              <Badge variant="secondary">not found</Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">{t("codexState.backups")}:</p>
-            <Badge variant="outline">{state?.backupPairs?.length ?? 0}</Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">Override:</p>
-            <Badge variant="destructive">inactive</Badge>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// Group targets by provider
-function groupTargetsByProvider(targets: CodexTarget[]): Record<string, CodexTarget[]> {
-  return targets.reduce((acc, target) => {
-    if (!acc[target.providerId]) {
-      acc[target.providerId] = []
-    }
-    acc[target.providerId].push(target)
-    return acc
-  }, {} as Record<string, CodexTarget[]>)
-}
-
-function ProviderSelector({ targets, onApply }: { targets: CodexTarget[]; onApply: () => void }) {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const [selectedProvider, setSelectedProvider] = useState("")
-  const [selectedModel, setSelectedModel] = useState("")
-  const [probeResult, setProbeResult] = useState<ProbeResult | null>(null)
-  const [probing, setProbing] = useState(false)
-  const [testingAll, setTestingAll] = useState(false)
-  const [probeResults, setProbeResults] = useState<Record<string, ProbeResult>>({})
-
-  // Group targets by provider
-  const groupedTargets = groupTargetsByProvider(targets)
-  const providerIds = Object.keys(groupedTargets)
-
-  const currentTarget = targets.find(t => t.providerId === selectedProvider && t.modelId === selectedModel)
-
-  const handleProbe = async (providerId: string, modelId: string) => {
-    setProbing(true)
-    const key = `${providerId}::${modelId}`
-    setProbeResults(prev => ({ ...prev, [key]: { ok: true, latencyMs: 0, error: undefined } }))
-    try {
-      const result = await api.codex.probe(providerId, modelId)
-      if (result.ok && result.data) {
-        setProbeResults(prev => ({ ...prev, [key]: result.data! }))
-        if (providerId === selectedProvider && modelId === selectedModel) {
-          setProbeResult(result.data)
-        }
-      }
-    } catch (e) {
-      const errResult = { ok: false, latencyMs: 0, error: { code: "error", message: String(e) } }
-      setProbeResults(prev => ({ ...prev, [key]: errResult }))
-      if (providerId === selectedProvider && modelId === selectedModel) {
-        setProbeResult(errResult)
-      }
-    }
-    setProbing(false)
-  }
-
-  const handleTestAll = async () => {
-    setTestingAll(true)
-    setProbeResults({})
-    await Promise.all(targets.map(async (target) => {
-      try {
-        const result = await api.codex.probe(target.providerId, target.modelId)
-        if (result.ok && result.data) {
-          setProbeResults(prev => ({ ...prev, [`${target.providerId}::${target.modelId}`]: result.data! }))
-        }
-      } catch (e) {
-        const key = `${target.providerId}::${target.modelId}`
-        setProbeResults(prev => ({ ...prev, [key]: { ok: false, latencyMs: 0, error: { code: "error", message: String(e) } } }))
-      }
-    }))
-    setTestingAll(false)
-  }
-
-  const handleSelect = (providerId: string, modelId: string) => {
-    setSelectedProvider(providerId)
-    setSelectedModel(modelId)
-  }
-
-  const handleApply = async () => {
-    if (!selectedProvider || !selectedModel) return
-    try {
-      await api.codex.apply(selectedProvider, selectedModel)
-      queryClient.invalidateQueries({ queryKey: ["codex-state"] })
-      onApply()
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  return (
-    <Card data-tour="codex-providers">
-      <CardHeader>
-        <CardTitle>{t("provider.title")}</CardTitle>
-        <CardDescription>{t("provider.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Test All Button */}
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleTestAll} disabled={testingAll || targets.length === 0}>
-            {testingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
-            {testingAll ? t("provider.testingAll") : t("provider.testAll")}
-          </Button>
-          {Object.keys(probeResults).length > 0 && (
-            <span className="text-sm text-muted-foreground">
-              {`${Object.values(probeResults).filter(r => r.ok).length}/${Object.keys(probeResults).length} OK`}
-            </span>
-          )}
-        </div>
-
-        {/* External Warning */}
-        {targets.some(t => t.source !== "builtin") && (
-          <Alert variant="default" className="border-yellow-300 bg-yellow-50">
-            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-            <AlertDescription className="text-yellow-800 text-sm">
-              {t("provider.externalWarning")}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Provider Groups Table */}
-        {providerIds.map(providerId => {
-          const models = groupedTargets[providerId]
-          return (
-            <div key={providerId} className="border rounded-lg overflow-hidden">
-              <div className="bg-muted px-4 py-2 font-medium flex items-center justify-between">
-                <span>{models[0]?.providerName ?? providerId}</span>
-                <Badge variant="outline">{providerId}</Badge>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Context</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {models.map(target => {
-                    const key = `${target.providerId}::${target.modelId}`
-                    const result = probeResults[key]
-                    const isSelected = selectedProvider === target.providerId && selectedModel === target.modelId
-                    return (
-                      <TableRow key={key} className={isSelected ? "bg-primary/10" : ""}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <code className="text-sm">{target.displayName ?? target.modelId}</code>
-                            {target.isCurrentOverride && (
-                              <Badge variant="success" className="text-xs">Active</Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={target.source === "builtin" ? "outline" : "secondary"}>
-                            {target.source}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {target.contextWindow ? (
-                            <span className="text-sm text-muted-foreground">
-                              {target.contextWindow.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {!target.hasKey ? (
-                            <Badge variant="destructive" className="text-xs">No Key</Badge>
-                          ) : result ? (
-                            result.ok ? (
-                              <Badge variant="success">{result.latencyMs}ms</Badge>
-                            ) : (
-                              <Badge variant="destructive">Failed</Badge>
-                            )
-                          ) : (
-                            <Badge variant="secondary">Not tested</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleProbe(target.providerId, target.modelId)}
-                              disabled={probing || !target.hasKey}
-                              title={!target.hasKey ? "No API key configured" : "Test connection"}
-                            >
-                              {probing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={isSelected ? "default" : "outline"}
-                              onClick={() => handleSelect(target.providerId, target.modelId)}
-                              disabled={!target.hasKey}
-                            >
-                              Select
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                // TODO: Implement override
-                                console.log("Override", target.providerId, target.modelId)
-                              }}
-                              title="Set as runtime override"
-                            >
-                              Override
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )
-        })}
-
-        {/* Apply Button */}
-        <div className="flex gap-2">
-          <Button onClick={handleApply} disabled={!selectedProvider || !selectedModel}>
-            {t("provider.applyCodex")}
-          </Button>
-        </div>
-
-        {/* Selected Target Info */}
-        {currentTarget && (
-          <div className="p-3 bg-muted rounded-lg">
-            <p className="text-sm font-medium">{t("provider.targetUrl")}:</p>
-            <p className="text-xs font-mono text-muted-foreground">{currentTarget.baseUrl}</p>
-          </div>
-        )}
-
-        {/* Probe Result Alert */}
-        {probeResult && (
-          <Alert variant={probeResult.ok ? "default" : "destructive"}>
-            {probeResult.ok ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-            <AlertTitle>{probeResult.ok ? t("probe.success") : t("probe.failed")}</AlertTitle>
-            <AlertDescription>
-              <p>{t("probe.latency")}: {probeResult.latencyMs}ms</p>
-              {probeResult.error && <p className="text-sm mt-1">{probeResult.error.message}</p>}
-            </AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function BackupList({ pairs }: { pairs: BackupPair[] }) {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const restoreMutation = useMutation({
-    mutationFn: async (ts: number) => api.codex.restore(ts),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["codex-state"] }),
-  })
-  const deleteMutation = useMutation({
-    mutationFn: async (ts: number) => api.codex.deleteBackup(ts),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["codex-state"] }),
-  })
-
-  return (
-    <Card data-tour="backups">
-      <CardHeader>
-        <CardTitle>{t("backup.title")}</CardTitle>
-        <CardDescription>{t("backup.description")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {pairs.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("backup.timestamp")}</TableHead>
-                <TableHead>{t("backup.time")}</TableHead>
-                <TableHead>{t("backup.type")}</TableHead>
-                <TableHead>{t("backup.providerModel")}</TableHead>
-                <TableHead>{t("backup.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pairs.map((pair) => (
-                <TableRow key={pair.ts}>
-                  <TableCell className="font-mono text-xs">{pair.ts}</TableCell>
-                  <TableCell>{new Date(pair.ts).toLocaleString()}</TableCell>
-                  <TableCell>
-                    {pair.preserved ? <Badge variant="success">{t("backup.preserved")}</Badge> : <Badge variant="outline">{t("backup.snapshot")}</Badge>}
-                  </TableCell>
-                  <TableCell>
-                    <code className="text-xs">{pair.provider ?? "?"} / {pair.model ?? "?"}</code>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => restoreMutation.mutate(pair.ts)}>
-                        <RotateCcw className="mr-1 h-4 w-4" /> {t("backup.restore")}
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={() => {
-                        if (confirm(pair.preserved ? t("backup.confirmDeletePreserved") : t("backup.confirmDelete"))) {
-                          deleteMutation.mutate(pair.ts)
-                        }
-                      }}>
-                        <Trash2 className="mr-1 h-4 w-4" /> {t("backup.delete")}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>{t("backup.noBackups")}</p>
-            <p className="text-sm">{t("backup.noBackupsHint")}</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function OverridePanel() {
-  const queryClient = useQueryClient()
-  const [providerId, setProviderId] = useState("")
-  const [modelId, setModelId] = useState("")
-
-  const { data: override } = useQuery({
-    queryKey: ["active-override"],
-    queryFn: () => api.codex.activeOverride(),
-  })
-
-  const setMutation = useMutation({
-    mutationFn: async () => api.codex.setOverride(providerId, modelId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["active-override"] }),
-  })
-
-  const clearMutation = useMutation({
-    mutationFn: async () => api.codex.clearOverride(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["active-override"] }),
-  })
-
-  return (
-    <Card data-tour="codex-override">
-      <CardHeader>
-        <CardTitle>Runtime Override</CardTitle>
-        <CardDescription>Override provider/model at runtime (temporary)</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-          <div>
-            {override?.data ? (
-              <div className="flex items-center gap-2">
-                <Badge variant="default">{override.data.providerId}</Badge>
-                <span>/</span>
-                <Badge variant="outline">{override.data.modelId}</Badge>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No override active (using config)</p>
-            )}
-          </div>
-          <Button size="sm" variant="outline" onClick={() => clearMutation.mutate()} disabled={!override?.data || clearMutation.isPending}>
-            Clear Override
-          </Button>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Provider</label>
-            <input placeholder="openai" value={providerId} onChange={(e) => setProviderId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1" />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Model</label>
-            <input placeholder="gpt-4" value={modelId} onChange={(e) => setModelId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1" />
-          </div>
-        </div>
-        <Button onClick={() => setMutation.mutate()} disabled={!providerId || !modelId || setMutation.isPending}>
-          Set Override
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
+// ============ History Panel ============
 
 function HistoryPanel() {
   const { data: history, isLoading } = useQuery({
@@ -635,6 +133,8 @@ function HistoryPanel() {
   )
 }
 
+// ============ Thinking Panel ============
+
 function ThinkingPanel() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -646,11 +146,16 @@ function ThinkingPanel() {
     queryFn: () => api.codex.thinking(),
   })
 
-  const updateThinking = useMutation({
-    mutationFn: async (params: { disabled: boolean; forceHighEffort: boolean }) =>
-      api.codex.setThinking(params.disabled, params.forceHighEffort),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["thinking-state"] }),
-  })
+  const updateThinking = useQueryClient.prototype ? {} : {
+    mutate: async (params: { disabled: boolean; forceHighEffort: boolean }) => {
+      try {
+        await api.codex.setThinking(params.disabled, params.forceHighEffort)
+        queryClient.invalidateQueries({ queryKey: ["thinking-state"] })
+      } catch (e) {
+        console.error("Failed to update thinking:", e)
+      }
+    }
+  }
 
   const cliOverride = thinking?.data?.cli_override ?? false
 
@@ -685,7 +190,7 @@ function ThinkingPanel() {
               onCheckedChange={(checked) => {
                 const disabled = !checked
                 setThinkingDisabled(disabled)
-                updateThinking.mutate({ disabled, forceHighEffort })
+                updateThinking.mutate?.({ disabled, forceHighEffort })
               }}
             />
           </div>
@@ -711,6 +216,8 @@ function ThinkingPanel() {
   )
 }
 
+// ============ Main CodexPage ============
+
 export function CodexPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -732,18 +239,15 @@ export function CodexPage() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+R or Cmd+R - Refresh
       if ((e.ctrlKey || e.metaKey) && e.key === "r") {
         e.preventDefault()
         queryClient.invalidateQueries({ queryKey: ["codex-state"] })
         showNotification("success", "Refreshed!")
       }
-      // Ctrl+S or Cmd+S - Open Export
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault()
         setExportOpen(true)
       }
-      // Escape - Close modals
       if (e.key === "Escape") {
         setImportOpen(false)
         setExportOpen(false)
@@ -848,9 +352,9 @@ export function CodexPage() {
           </TabsList>
 
           <TabsContent value="config" className="space-y-4 animate-fadeIn">
-            <CodexStateCard state={state.data} onRefresh={handleRefresh} />
+            <CurrentStateCard state={state.data} onRefresh={handleRefresh} />
             {targets?.ok && targets.data && (
-              <ProviderSelector targets={targets.data.targets} onApply={() => showNotification("success", "Codex applied successfully!")} />
+              <ProviderBlock targets={targets.data.targets} onApplied={() => showNotification("success", "Codex applied successfully!")} />
             )}
           </TabsContent>
 
@@ -863,7 +367,7 @@ export function CodexPage() {
           </TabsContent>
 
           <TabsContent value="backups" className="animate-fadeIn">
-            <BackupList pairs={state.data?.backupPairs ?? []} />
+            <BackupCard pairs={state.data?.backupPairs ?? []} />
           </TabsContent>
 
           <TabsContent value="history" className="animate-fadeIn">
@@ -871,7 +375,7 @@ export function CodexPage() {
           </TabsContent>
 
           <TabsContent value="override">
-            <OverridePanel />
+            <RuntimeOverrideCard />
           </TabsContent>
         </Tabs>
       </div>
