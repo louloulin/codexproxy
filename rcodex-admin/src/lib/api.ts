@@ -677,6 +677,40 @@ export const api = {
         method: "DELETE",
       }),
   },
+
+  // Update API
+  update: {
+    // GET /admin/api/update-status
+    status: () =>
+      fetchJson<{
+        currentVersion: string
+        latestVersion: string | null
+        updateAvailable: boolean
+        releaseNotes: string | null
+        releaseUrl: string | null
+        checkedAt: string | null
+      }>(`${API_BASE}/update-status`),
+
+    // POST /admin/api/check-update
+    check: () =>
+      fetchJson<{
+        updateAvailable: boolean
+        latestVersion: string | null
+        releaseNotes: string | null
+        releaseUrl: string | null
+      }>(`${API_BASE}/check-update`, { method: "POST" }),
+
+    // PUT /admin/api/update-preference
+    setPreference: (autoCheck: boolean, channel: string = "stable") =>
+      fetchJson<{
+        ok: boolean
+        autoCheck: boolean
+        channel: string
+      }>(`${API_BASE}/update-preference`, {
+        method: "PUT",
+        body: JSON.stringify({ auto_check: autoCheck, channel }),
+      }),
+  },
 }
 
 interface CodexBundleResponse {
@@ -691,3 +725,4 @@ interface ImportResponse {
   restartRequired: boolean
   bundleUrl?: string | null
 }
+
