@@ -1,6 +1,6 @@
 import type { CodexState, CodexTargetsResponse, ProbeResult, CodexHistoryEntry, ProviderConfigsResponse, SetupSnippetsResponse } from "@/types/codex"
 
-const API_BASE = "/admin/api"
+const API_BASE = "/api"
 
 const TOKEN_KEY = "rcodex_auth_token"
 

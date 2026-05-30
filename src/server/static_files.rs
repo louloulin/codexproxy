@@ -60,20 +60,8 @@ fn make_response(path: &str, file: rust_embed::EmbeddedFile) -> Response {
 pub async fn serve_spa(uri: Uri) -> Response {
     let path = uri.path();
 
-    // Handle /admin and /admin/* routes
-    let spa_path = if path.starts_with("/admin") {
-        path.strip_prefix("/admin").unwrap_or("")
-    } else if path == "/admin" {
-        ""
-    } else {
-        return Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(axum::body::Body::empty())
-            .unwrap();
-    };
-
-    // Strip leading slash for the file lookup
-    let file_path = spa_path.trim_start_matches('/');
+    // Strip /admin prefix since files are embedded from dist/
+    let file_path = path.strip_prefix("/admin").unwrap_or(path).trim_start_matches('/');
 
     // Try to serve the exact file
     if !file_path.is_empty() {

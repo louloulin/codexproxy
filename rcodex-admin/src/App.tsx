@@ -33,7 +33,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <AuthProvider>
-            <BrowserRouter>
+            <BrowserRouter basename="/admin">
               <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />

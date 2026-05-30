@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react"
 
 export default defineConfig({
   plugins: [react()],
-  base: "/admin/",  // All assets served under /admin path
+  base: "/admin/",  // Assets under /admin
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
