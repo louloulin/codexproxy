@@ -53,6 +53,28 @@ export interface ApiResponse<T> {
 }
 
 export const api = {
+  // Bootstrap API
+  bootstrap: {
+    // GET /admin/api/bootstrap-status
+    status: () =>
+      fetchJson<{
+        needsBootstrap: boolean
+        userCount: number
+      }>(`${API_BASE}/bootstrap-status`),
+
+    // POST /admin/api/bootstrap
+    setup: (username: string, password: string, displayName?: string) =>
+      fetchJson<{
+        ok: boolean
+        userId: number
+        isAdmin: boolean
+        username: string
+      }>(`${API_BASE}/bootstrap`, {
+        method: "POST",
+        body: JSON.stringify({ username, password, display_name: displayName }),
+      }),
+  },
+
   // Auth API
   auth: {
     // POST /admin/api/auth/login

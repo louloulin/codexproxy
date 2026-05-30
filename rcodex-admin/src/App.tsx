@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary"
 import { ProtectedRoute } from "@/components/common/ProtectedRoute"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { LoginPage } from "@/pages/LoginPage"
+import { BootstrapPage } from "@/pages/BootstrapPage"
 import "./i18n"
 
 const queryClient = new QueryClient({
@@ -35,6 +36,7 @@ function App() {
               <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/bootstrap" element={<BootstrapPage />} />
                 
                 {/* Protected routes with Layout */}
                 <Route

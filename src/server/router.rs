@@ -162,6 +162,7 @@ pub fn create_router(
         .route("/admin/api/update-status", get(crate::handlers::admin::get_update_status_handler))
         // Bootstrap (first-run setup)
         .route("/admin/api/bootstrap", post(crate::handlers::admin::bootstrap_handler))
+        .route("/admin/api/bootstrap-status", get(crate::handlers::admin::bootstrap_status_handler))
         // Thinking state
         .route("/admin/api/thinking-state", put(crate::handlers::admin::set_thinking_state_handler))
         // Data migration

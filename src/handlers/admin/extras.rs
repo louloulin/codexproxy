@@ -448,6 +448,26 @@ pub async fn bootstrap_handler(
     }
 }
 
+/// GET /admin/api/bootstrap-status - Check if bootstrap is needed
+pub async fn bootstrap_status_handler(
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    let user_repo = match state.auth_state.as_ref() {
+        Some(auth) => auth.user_repo.clone(),
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "Auth not configured").into_response(),
+    };
+
+    match user_repo.count_users() {
+        Ok(count) => {
+            Json(serde_json::json!({
+                "needsBootstrap": count == 0,
+                "userCount": count,
+            })).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("DB error: {}", e)).into_response(),
+    }
+}
+
 // ─── Thinking State ────────────────────────────────────────────────
 
 /// PUT /admin/api/thinking-state - Set thinking mode
