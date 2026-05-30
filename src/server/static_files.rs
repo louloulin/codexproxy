@@ -4,7 +4,7 @@ use axum::{
     response::Response,
 };
 
-/// Embedded admin SPA files
+/// Embedded admin SPA files (from rcodex-admin/dist)
 #[derive(Embed)]
 #[folder = "rcodex-admin/dist"]
 struct Assets;
