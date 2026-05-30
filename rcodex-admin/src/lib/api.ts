@@ -53,6 +53,125 @@ export interface ApiResponse<T> {
 }
 
 export const api = {
+  // Auth API
+  auth: {
+    // POST /admin/api/auth/login
+    login: (username: string, password: string) =>
+      fetchJson<{
+        ok: boolean
+        data?: {
+          token: string
+          user: {
+            id: number
+            username: string
+            role: string
+            is_admin: boolean
+            created_at: number
+          }
+          expires_at: number
+        }
+        error?: string | null
+      }>(`${API_BASE}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      }),
+
+    // POST /admin/api/auth/register
+    register: (username: string, password: string) =>
+      fetchJson<{
+        ok: boolean
+        data?: {
+          token: string
+          user: {
+            id: number
+            username: string
+            role: string
+            is_admin: boolean
+            created_at: number
+          }
+          expires_at: number
+        }
+        error?: string | null
+      }>(`${API_BASE}/auth/register`, {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      }),
+
+    // POST /admin/api/auth/logout
+    logout: () =>
+      fetchJson<{ ok: boolean }>(`${API_BASE}/auth/logout`, { method: "POST" }),
+
+    // GET /admin/api/auth/me (current user info)
+    me: () =>
+      fetchJson<{
+        ok: boolean
+        data?: {
+          id: number
+          username: string
+          role: string
+          is_admin: boolean
+          created_at: number
+        }
+        error?: string | null
+      }>(`${API_BASE}/auth/me`),
+  },
+
+  // Users API
+  users: {
+    // GET /admin/api/users
+    list: () =>
+      fetchJson<{
+        users: Array<{
+          id: number
+          username: string
+          displayName: string | null
+          email: string | null
+          avatarUrl: string | null
+          isAdmin: boolean
+          status: string
+          createdAt: string
+          updatedAt: string
+          requestCount: number
+          totalTokens: number
+          lastActivity: string | null
+        }>
+      }>(`${API_BASE}/users`),
+
+    // POST /admin/api/users
+    create: (username: string, password: string, isAdmin: boolean = false) =>
+      fetchJson<{
+        user: {
+          id: number
+          username: string
+          isAdmin: boolean
+          status: string
+        }
+      }>(`${API_BASE}/users`, {
+        method: "POST",
+        body: JSON.stringify({ username, password, is_admin: isAdmin }),
+      }),
+
+    // PATCH /admin/api/users/:id
+    update: (id: number, updates: { role?: string; is_admin?: boolean; status?: string; password?: string }) =>
+      fetchJson<{
+        user: {
+          id: number
+          username: string
+          isAdmin: boolean
+          status: string
+        }
+      }>(`${API_BASE}/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      }),
+
+    // DELETE /admin/api/users/:id
+    delete: (id: number) =>
+      fetchJson<{ ok: boolean }>(`${API_BASE}/users/${id}`, {
+        method: "DELETE",
+      }),
+  },
+
   // Stats API
   stats: {
     // GET /admin/api/stats?range=24h

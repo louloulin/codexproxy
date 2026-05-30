@@ -242,6 +242,15 @@ impl UserRepository {
         password_hash: Option<&str>,
     ) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
+
+        // First verify user exists
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)",
+            params![id],
+            |row| row.get(0),
+        )?;
+        eprintln!("DEBUG update_user: id={}, exists={}", id, exists);
+
         let mut updates = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
@@ -278,8 +287,11 @@ impl UserRepository {
             updates.join(", ")
         );
 
+        eprintln!("DEBUG update_user: sql={}", sql);
+
         let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
         let affected = conn.execute(&sql, params_refs.as_slice())?;
+        eprintln!("DEBUG update_user: affected={}", affected);
         Ok(affected > 0)
     }
 

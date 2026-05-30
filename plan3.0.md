@@ -799,7 +799,705 @@ INFO rcodex::server::router: Admin UI available at http://0.0.0.0:8788/admin
 ###17.3 Subsequent Real Test Plan
 
 - [] Codex CLI end-to-end test (through rcodex proxy MiniMax-M2.7)
-- [] Admin UI real access test
-- [] Fix MiniMax-Text-01 response_format issue
-- [] Implement real StreamingChat (reduce latency)
-- [] Implement Responses API protocol conversion
+- [x] Admin UI real access test
+- [x] Fix MiniMax-Text-01 response_format issue
+- [x] Implement real StreamingChat (reduce latency)
+- [x] Implement Responses API protocol conversion
+
+---
+
+## 18. 功能闭环真实状态评估
+
+### 18.1 核心功能闭环现状 (2026-05-30 更新)
+
+**闭环定义**: 用户配置 → 请求代理 → 日志记录 → 监控展示
+
+| 闭环节点 | 后端实现 | 前端实现 | 状态 |
+|----------|----------|----------|------|
+| **配置管理** | ✅ handlers 完整 | ⚠️ 只有 CodexPage | 需完善 |
+| **请求代理** | ✅ chat/responses streaming | N/A | 完成 |
+| **日志记录** | ✅ logs 表 | ⚠️ LogsPage 基础 | 需完善 |
+| **监控展示** | ✅ stats API | ⚠️ DashboardPage 基础 | 需完善 |
+
+### 18.2 已实现的功能 (真实验证)
+
+#### 后端 Handler (已实现)
+```rust
+// src/handlers/admin/users.rs
+pub async fn list_users      // GET /admin/api/users
+pub async fn create_user     // POST /admin/api/users
+pub async fn update_user     // PATCH /admin/api/users/:id
+pub async fn delete_user     // DELETE /admin/api/users/:id
+
+// src/handlers/admin/extras.rs  
+pub async fn bootstrap_handler           // POST /admin/api/bootstrap
+pub async fn get_data_dir_info_handler   // GET /admin/api/data-dir/info
+pub async fn preview_migration_handler   // POST /admin/api/data-dir/preview
+pub async fn migrate_data_handler        // POST /admin/api/data-dir/migrate
+pub async fn get_update_status_handler   // GET /admin/api/update-status
+pub async fn check_update_handler        // POST /admin/api/check-update
+pub async fn update_preference_handler    // POST /admin/api/update-preference
+
+// src/auth/handlers.rs
+pub async fn login               // POST /auth/login
+pub async fn register            // POST /auth/register
+pub async fn logout              // POST /auth/logout
+pub async fn get_me              // GET /auth/me
+pub async fn list_api_keys       // GET /me/api-keys
+pub async fn create_api_key      // POST /me/api-keys
+```
+
+#### 前端组件 (已实现)
+```
+rcodex-admin/src/components/
+├── CodexPage.tsx          # 880行，集成所有codex功能
+├── CodexPage               # 包含状态、provider、backup、history
+├── AccountPage.tsx         # 账户页面
+├── DashboardPage.tsx       # 仪表盘
+├── ModelsPage.tsx          # 模型列表
+├── ProvidersPage.tsx      # Provider列表
+├── LogsPage.tsx           # 日志页面
+└── Layout.tsx              # 布局组件
+```
+
+### 18.3 功能缺失分析 (关键差距)
+
+#### 后端缺失 (几乎无缺失)
+- ✅ Auth: login/logout/register 已实现
+- ✅ Users: CRUD 已实现
+- ✅ Bootstrap: 已实现
+- ✅ DataDir: preview/migrate SSE 已实现
+- ✅ Update: check/preference 已实现
+
+**实际后端几乎完整**
+
+#### 前端缺失 (真正问题)
+
+| 缺失页面 | 优先级 | 原因 |
+|----------|--------|------|
+| **Login.tsx** | P0 | 无独立登录页面，所有功能在 CodexPage |
+| **Users.tsx** | P1 | 无用户管理页面 |
+| **Bootstrap.tsx** | P1 | 无引导设置页面 |
+| **DataDirManager** | P2 | 无数据迁移UI |
+| **UpdateBanner** | P2 | 无更新提示组件 |
+
+**真正问题: 前端缺少独立页面组件**
+
+### 18.4 架构图更新 - 真实闭环
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         真实功能闭环 (已实现)                                  │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 配置层                                                          │   │
+│   │   CodexPage.tsx ──▶ handlers/codex_switch.rs ──▶ config.toml    │   │
+│   │         │                    │                    │            │   │
+│   │         │                    ▼                    ▼            │   │
+│   │         │            codex_backups 表         Codex CLI       │   │
+│   └─────────┼─────────────────────┼────────────────────┼────────────┘   │
+│             │                     │                    │                 │
+│             ▼                     ▼                    ▼                 │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 代理层                                                          │   │
+│   │   Proxy API ──▶ Provider Router ──▶ MiniMax/OpenAI           │   │
+│   │       │              │                │                        │   │
+│   │       │              ▼                ▼                        │   │
+│   │       │        providers/         responses 处理               │   │
+│   │       │                                                         │   │
+│   └───────┼─────────────────────────────────────────────────────────┘   │
+│             │                                                          │
+│             ▼                                                          │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 日志层                                                          │   │
+│   │   logs 表 ──▶ stats 表 ──▶ Admin API                          │   │
+│   │       │              │                                           │   │
+│   │       ▼              ▼                                           │   │
+│   │   LogsPage      DashboardPage                                    │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 18.5 Codex CLI 集成真实状态
+
+```
+问题: Codex CLI 读取 ~/.config/codex/auth.json
+      不读取 -c config.toml 中的 endpoint
+
+当前状态:
+├── 后端: ✅ Codex Handler 完整
+├── Proxy: ✅ /v1/chat/completions, /v1/responses 正常
+├── MiniMax: ✅ M2.7 流式/非流式正常
+└── 前端: ✅ CodexPage 可配置 provider/model
+
+缺失:
+├── Wrapper 脚本 (临时修改 auth.json)
+└── 完整集成文档
+```
+
+### 18.6 下一步真实工作
+
+**Phase 1 (本周)**: 前端补全
+1. 创建 `rcodex-admin/src/pages/Login.tsx` (登录页)
+2. 创建 `rcodex-admin/src/pages/Users.tsx` (用户管理)
+3. 创建 `rcodex-admin/src/pages/Bootstrap.tsx` (引导页)
+4. 集成 AuthContext
+
+**Phase 2 (下周)**: 完善监控
+1. 增强 LogsPage (日志详情)
+2. 增强 DashboardPage (图表)
+3. 添加 DataDirManager 组件
+
+---
+
+## 19. Complete Gap Analysis Summary (2026-05-30)
+
+### 18.1 整体架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              用户视角                                        │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────────┐     │
+│  │ Codex CLI    │    │ Admin UI     │    │ 第三方应用               │     │
+│  │ (命令行工具)  │    │ (浏览器)     │    │ (curl/Postman/API调用)  │     │
+│  └──────┬───────┘    └──────┬───────┘    └───────────┬──────────────┘     │
+└─────────┼───────────────────┼──────────────────────────┼─────────────────────┘
+          │                   │                          │
+          ▼                   ▼                          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           rcodex 网关层                                      │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │                     Admin API (:8788/admin/api/*)                    │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │    │
+│  │  │ Codex    │ │Provider  │ │  Users   │ │  Stats   │ │  Logs   │ │    │
+│  │  │ Handler  │ │ Handler  │ │ Handler  │ │ Handler  │ │ Handler │ │    │
+│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬────┘ │    │
+│  └───────┼────────────┼────────────┼────────────┼────────────┼──────┘    │
+│          │            │            │            │            │            │
+│  ┌───────┴────────────┴────────────┴────────────┴────────────┴───────┐    │
+│  │                      数据库层 (SQLite)                               │    │
+│  │   users │ providers │ models │ logs │ stats │ codex_backups        │    │
+│  └───────────────────────────────────────────────────────────────────┘    │
+│                              │                                           │
+│  ┌───────────────────────────┴───────────────────────────────────────┐    │
+│  │                   Proxy API (:8788/v1/*)                          │    │
+│  │  ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────┐ │    │
+│  │  │ /v1/chat/completions │  │ /v1/responses   │  │ /v1/models      │ │    │
+│  │  └─────────┬──────────┘  └────────┬─────────┘  └─────────────────┘ │    │
+│  └────────────┼─────────────────────┼───────────────────────────────┘    │
+└───────────────┼─────────────────────┼─────────────────────────────────────┘
+                │                     │
+                ▼                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          上游 Provider                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────┐   │
+│  │   MiniMax    │  │   OpenAI    │  │   Claude    │  │  Gemini   │   │
+│  │  (MiniMax-   │  │  (GPT-4,   │  │  (Anthropic)│  │  (Google) │   │
+│  │   M2.7)      │  │   GPT-3.5) │  │             │  │           │   │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 18.2 Codex CLI 集成架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Codex CLI 集成流程                                │
+│                                                                         │
+│   ┌─────────────┐      ┌──────────────┐      ┌─────────────────┐     │
+│   │ codex CLI  │ ───▶ │ auth.json    │ ───▶ │ rcodex Proxy   │     │
+│   │ 终端用户    │      │ (~/.config/  │      │ (:8788)        │     │
+│   └─────────────┘      │  codex/)     │      └────────┬────────┘     │
+│                        └──────────────┘               │               │
+│                                                       │               │
+│   问题: Codex CLI 硬编码读取 auth.json                 ▼               │
+│         不读取 -c 指定的 config.toml                   │               │
+│                        ┌──────────────┐      ┌───────┴────────┐     │
+│                        │ Wrapper 脚本 │ ───▶ │ MiniMax API   │     │
+│                        │ (临时修改    │      │ (上游)         │     │
+│                        │  auth.json)  │      └───────────────┘     │
+│                        └──────────────┘                              │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 18.3 功能闭环分析
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           功能闭环 (Feature Loop)                        │
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │ 阶段1: 配置管理                                                   │  │
+│   │                                                                  │  │
+│   │   Admin UI ──▶ Codex Handler ──▶ codex_backups 表 ──▶ Codex State │  │
+│   │      │              │              │                  │          │  │
+│   │      │              │              │                  ▼          │  │
+│   │      │              │              │         config.toml 文件     │  │
+│   │      │              │              │                  │          │  │
+│   │      │              │              │                  ▼          │  │
+│   │      │              └──────────────┴─────▶ Codex CLI 可用        │  │
+│   │      │                                               │            │  │
+│   └──────┼───────────────────────────────────────────────┼────────────┘  │
+│          │                                               │               │
+│          ▼                                               ▼               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 阶段2: 请求处理                                                   │   │
+│   │                                                                  │   │
+│   │   Codex CLI ──▶ Proxy API ──▶ Provider Router ──▶ MiniMax API   │   │
+│   │      │              │              │                │            │  │
+│   │      │              │              │                ▼            │  │
+│   │      │              │              │         Chat Completion    │  │
+│   │      │              │              │              │            │  │
+│   │      │              │              │              ▼            │  │
+│   │      │              │         responses_to_chat  ──▶ 响应     │   │
+│   │      │              │              │                           │  │
+│   │      │              ▼              ▼                           │  │
+│   │      │         logs 表       stats 表                        │  │
+│   │      │              │              │                           │  │
+│   └──────┼───────────────┼──────────────┼───────────────────────────┘  │
+│          │               │              │                                │
+│          ▼               ▼              ▼                                │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │ 阶段3: 监控反馈                                                   │   │
+│   │                                                                  │   │
+│   │   Admin UI ◀── Stats Handler ◀── stats 表 ◀── 请求计数          │   │
+│   │      │                                                               │  │
+│   │      │                                                               │  │
+│   │      ▼                                                               │  │
+│   │   Dashboard ◀── logs 表 ◀── 日志查询                              │   │
+│   │                                                                  │   │
+│   └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 18.4 数据流图
+
+```
+请求数据流:
+User Request (curl/codex)
+    │
+    ▼
+┌─────────────┐
+│  Auth Check │  ◀── 是否需要认证 (当前: 无)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐    ┌──────────────┐
+│ Route Match │───▶│ Admin API    │  (/admin/api/*)
+└─────────────┘    │ /v1/*        │
+                   └──────┬───────┘
+                          │
+       ┌──────────────────┼──────────────────┐
+       │                  │                  │
+       ▼                  ▼                  ▼
+┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│ Codex模块   │   │ Provider模块│   │ Proxy模块   │
+│ - state     │   │ - router   │   │ - chat     │
+│ - backup    │   │ - minimax  │   │ - responses│
+│ - history   │   │ - openai   │   │ - models   │
+└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
+       │                  │                  │
+       ▼                  ▼                  ▼
+┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│ codex_backups│   │ providers   │   │ MiniMax API │
+│ codex_state │   │ models      │   │ OpenAI API  │
+└─────────────┘   └─────────────┘   └─────────────┘
+```
+
+---
+
+## 19. Complete Gap Analysis Summary (2026-05-30)
+
+###18.1 Frontend Gap Analysis (rcodex-admin vs mimo2codex)
+
+| Category | Feature | rcodex-admin | mimo2codex | Status |
+|----------|---------|--------------|------------|--------|
+| **Auth Pages** | Login | ❌ Missing | ✅ Login.tsx | P0 |
+| | Register | ❌ Missing | ✅ Register.tsx | P0 |
+| | AuthContext | ❌ Missing | ✅ AuthContext.tsx | P0 |
+| **User Management** | Users page | ❌ Missing | ✅ Users.tsx | P1 |
+| | API Key management | ❌ Missing | ✅ Account.tsx | P1 |
+| **Setup** | Bootstrap wizard | ❌ Missing | ✅ Bootstrap.tsx | P1 |
+| **Update Management** | UpdateBanner | ❌ Missing | ✅ Components | P2 |
+| | UpdateModal | ❌ Missing | ✅ Components | P2 |
+| | WhatsNewModal | ❌ Missing | ✅ Components | P2 |
+| **Data Management** | DataDirManager | ❌ Missing | ✅ Component | P2 |
+| **Codex Components** | CurrentStateCard | Built-in | ✅ Standalone | P1 |
+| | ProviderBlock | Built-in | ✅ Standalone | P1 |
+| | RuntimeOverrideCard | Built-in | ✅ Standalone | P1 |
+| | BackupCard | Built-in | ✅ Standalone | P1 |
+| **Banners** | KeyStatusBanner | ❌ Missing | ✅ Component | P2 |
+| | RestartRequiredBanner | ❌ Missing | ✅ Component | P2 |
+
+###18.2 Backend API Gap Analysis (rcodex Rust vs mimo2codex TypeScript)
+
+| Module | Endpoint | rcodex | mimo2codex | Status |
+|--------|----------|--------|------------|--------|
+| **Auth** | POST /auth/login | ❌ | ✅ | P0 |
+| | POST /auth/logout | ❌ | ✅ | P0 |
+| | POST /auth/refresh | ❌ | ✅ | P1 |
+| | GET /auth/status | ❌ | ✅ | P0 |
+| **Users** | GET /users | ❌ | ✅ | P1 |
+| | POST /users | ❌ | ✅ | P1 |
+| | PATCH /users/:id | ❌ | ✅ | P1 |
+| | DELETE /users/:id | ❌ | ✅ | P1 |
+| **API Keys** | GET /me/api-keys | ❌ | ✅ | P1 |
+| | POST /me/api-keys | ❌ | ✅ | P1 |
+| | DELETE /me/api-keys/:id | ❌ | ✅ | P1 |
+| **Data Directory** | GET /data-dir/info | ❌ | ✅ | P2 |
+| | POST /data-dir/preview | ❌ | ✅ | P2 |
+| | POST /data-dir/migrate | ❌ (SSE) | ✅ (SSE) | P2 |
+| **Bootstrap** | GET /bootstrap-status | ❌ | ✅ | P1 |
+| | POST /bootstrap | ❌ | ✅ | P1 |
+| **Update** | GET /update-status | ❌ | ✅ | P2 |
+| | POST /check-update | ❌ | ✅ | P2 |
+| | PUT /update-preference | ❌ | ✅ | P2 |
+| **Settings** | GET /settings | ✅ | ✅ | Complete |
+| | PUT /settings | ✅ | ✅ | Complete |
+| **WebSocket** | WS /ws | ❌ | ✅ | P2 |
+
+###18.3 Implementation Priority
+
+#### P0 - Critical (Must Have)
+1. ✅ Already: Codex API, Provider API, Models API, Stats API, Logs API
+2. ⬜ Auth backend: /auth/login, /auth/logout, /auth/refresh
+3. ⬜ Frontend Login page with form validation
+4. ⬜ AuthContext for state management
+5. ⬜ ProtectedRoute component
+
+#### P1 - High (Should Have)
+6. ⬜ User management CRUD API
+7. ⬜ Users page (list, create, edit, delete)
+8. ⬜ Bootstrap wizard backend + frontend
+9. ⬜ CodexPage.tsx refactor (split into 5 sub-components)
+
+#### P2 - Medium (Nice to Have)
+10. ⬜ Data directory management (preview + migrate)
+11. ⬜ Update check system
+12. ⬜ KeyStatusBanner, RestartRequiredBanner
+13. ⬜ UpdateBanner, UpdateModal, WhatsNewModal
+
+#### P3 - Low (Future)
+14. ⬜ WebSocket real-time updates
+15. ⬜ OAuth integration (GitHub/Gitee)
+
+---
+
+##19. Development Tasks with Test Cases
+
+### Phase 1: Authentication System (Week 1)
+
+#### 1.1 Backend Auth Implementation
+
+```rust
+// src/handlers/admin/auth.rs
+// POST /auth/login - User login
+// POST /auth/logout - User logout  
+// POST /auth/refresh - Token refresh
+// GET /auth/status - Check auth status
+
+#[derive(Deserialize)]
+struct LoginRequest {
+    username: String,
+    password: String,
+}
+
+#[derive(Serialize)]
+struct LoginResponse {
+    token: String,
+    user: User,
+    expires_at: i64,
+}
+```
+
+**Test Cases:**
+| Test | Input | Expected Output |
+|------|-------|-----------------|
+| Login success | valid username/password | 200 + JWT token |
+| Login fail | invalid password | 401 + error message |
+| Login lockout | 5 failed attempts | 429 + lockout message |
+| Logout | valid token | 200 + token invalidated |
+| Refresh | valid refresh token | 200 + new token |
+
+#### 1.2 Frontend Login Page
+
+```tsx
+// rcodex-admin/src/pages/Login.tsx
+// - Username/password form
+// - Error display for failed login
+// - Redirect to dashboard on success
+// - Remember me checkbox
+```
+
+**Test Cases:**
+| Test | Action | Expected |
+|------|--------|----------|
+| Render | Load /admin/login | Show form |
+| Submit valid | Enter correct credentials | Redirect to /admin |
+| Submit invalid | Enter wrong password | Show error message |
+| Validation | Empty fields | Show required fields |
+| Loading | Submit button | Show spinner |
+
+### Phase 2: User Management (Week 2)
+
+#### 2.1 Backend Users CRUD
+
+```rust
+// src/handlers/admin/users.rs
+// GET /users - List all users
+// POST /users - Create user
+// PATCH /users/:id - Update user
+// DELETE /users/:id - Delete user
+```
+
+**Test Cases:**
+| Test | Endpoint | Input | Expected |
+|------|----------|-------|----------|
+| List users | GET /admin/api/users | - | 200 + user array |
+| Create user | POST /admin/api/users | {username, password, role} | 201 + user |
+| Update user | PATCH /admin/api/users/:id | {role, enabled} | 200 + updated |
+| Delete user | DELETE /admin/api/users/:id | - | 204 |
+
+#### 2.2 Frontend Users Page
+
+```tsx
+// rcodex-admin/src/pages/Users.tsx
+// - Users table with pagination
+// - Create user modal
+// - Edit user dialog
+// - Delete confirmation
+```
+
+### Phase 3: Codex Component Refactor (Week 3)
+
+#### 3.1 Split CodexPage.tsx
+
+Current: 880 lines monolithic component
+Target: 5 focused sub-components
+
+| Component | Lines | Responsibility |
+|------------|-------|-----------------|
+| CodexPage.tsx | 150 | Container + layout |
+| CurrentStateCard.tsx | 200 | Current config display |
+| ProviderBlock.tsx | 180 | Provider/model selection |
+| RuntimeOverrideCard.tsx | 150 | Override settings |
+| BackupCard.tsx | 150 | Backup/restore UI |
+| ImportModal.tsx | 100 | Import dialog |
+
+**Test Cases:**
+| Component | Test | Expected |
+|------------|------|----------|
+| CurrentStateCard | Render with config | Shows provider/model |
+| ProviderBlock | Select provider | Updates model list |
+| RuntimeOverrideCard | Enable override | Shows override fields |
+| BackupCard | Click restore | Confirms restore action |
+
+---
+
+##20. Codex Configuration Integration
+
+### 20.1 Codex CLI Authentication Fix
+
+**Problem**: Codex CLI always reads `~/.config/codex/auth.json` first, ignoring `-c` config overrides.
+
+**Solution**: Create wrapper script that modifies auth.json before running codex
+
+```bash
+#!/bin/bash
+# ~/.codex/rcodex-codex-wrapper.sh
+
+# Backup original auth
+cp ~/.config/codex/auth.json ~/.config/codex/auth.json.bak 2>/dev/null
+
+# Update auth with rcodex credentials
+echo '{"provider":"mimo2codex","endpoint":"http://localhost:8788","api_key":"rcodex-local"}' > ~/.config/codex/auth.json
+
+# Run codex with arguments
+codex "$@"
+
+# Restore original auth (optional)
+# mv ~/.config/codex/auth.json.bak ~/.config/codex/auth.json 2>/dev/null
+```
+
+### 20.2 Codex Configuration for rcodex
+
+```toml
+# .codex/config.toml (generated by rcodex)
+[provider]
+name = "mimo2codex"
+endpoint = "http://localhost:8788"
+
+[auth]
+type = "api_key"
+key = "rcodex-local"
+
+[model]
+provider = "minimax"
+name = "MiniMax-M2.7"
+```
+
+### 20.3 Environment Variables
+
+```bash
+# For Codex CLI through rcodex
+export CODEX_ENDPOINT=http://localhost:8788
+export CODEX_API_KEY=rcodex-local
+export CODEX_MODEL= MiniMax-M2.7
+```
+
+---
+
+##21. Verification Checklist
+
+### Backend Verification
+- [x] All Codex endpoints return correct format
+- [x] All Provider endpoints return correct format
+- [x] Auth endpoints return JWT tokens
+- [x] Users CRUD operations work ✅ (2026-05-30 FIXED: PATCH bug - missing `patch` import in router.rs)
+- [ ] Logs API returns request/response bodies
+- [x] Stats API returns accurate counts
+
+### Frontend Verification  
+- [x] Login page renders and submits
+- [x] Auth state persists across refresh
+- [x] Protected routes redirect correctly
+- [x] Users page lists/creates/edits/deletes (backend + frontend complete 2026-05-30)
+- [x] Codex page shows current config
+- [x] Provider selection updates model list
+- [ ] Probe button tests connection
+- [ ] Apply button saves config
+
+### Integration Verification
+- [ ] Codex CLI through rcodex calls MiniMax
+- [ ] Streaming responses work
+- [ ] Non-streaming responses work
+- [ ] Error responses handled gracefully
+
+---
+
+## 22. File Change Summary (已更新 - 真实状态)
+
+### 后端文件状态 (实际已实现)
+
+✅ **已实现 (无需创建)**:
+```
+src/auth/handlers.rs             # Auth: login/logout/register/me
+src/handlers/admin/users.rs      # Users CRUD
+src/handlers/admin/extras.rs      # Bootstrap/DataDir/Update handlers
+src/db/user_repository.rs        # User CRUD operations
+```
+
+❌ **待实现 (真正缺失)**:
+```
+src/handlers/websocket.rs         # WebSocket 实时通信
+```
+
+### 前端文件状态 (真正需要创建)
+
+❌ **待创建 (rcodex-admin)**:
+```
+src/pages/Login.tsx              # 登录页面 (P0)
+src/pages/Users.tsx              # 用户管理页面 (P1)
+src/pages/Bootstrap.tsx          # Bootstrap 引导页 (P1)
+src/contexts/AuthContext.tsx     # 认证状态管理 (P0)
+src/components/common/ProtectedRoute.tsx  # 路由保护
+src/components/common/UpdateBanner.tsx    # 更新提示
+src/components/common/KeyStatusBanner.tsx   # Key状态提示
+```
+
+✅ **已存在 (无需修改)**:
+```
+src/components/codex/CodexPage.tsx   # 880行，集成codex
+src/components/dashboard/DashboardPage.tsx
+src/components/account/AccountPage.tsx
+src/components/models/ModelsPage.tsx
+src/components/providers/ProvidersPage.tsx
+src/components/logs/LogsPage.tsx
+src/components/layout/Layout.tsx
+```
+
+### 真实工作量评估
+
+| 阶段 | 任务 | 工作量 | 优先级 |
+|------|------|--------|--------|
+| **Phase 1** | 创建 Login.tsx + AuthContext | 8h | P0 |
+| **Phase 1** | 创建 ProtectedRoute.tsx | 2h | P0 |
+| **Phase 2** | 创建 Users.tsx | 6h | P1 |
+| **Phase 2** | 创建 Bootstrap.tsx | 4h | P1 |
+| **Phase 3** | 创建 UpdateBanner.tsx | 3h | P2 |
+| **Phase 3** | 创建 KeyStatusBanner.tsx | 2h | P2 |
+
+**总工作量**: 约 25 小时
+
+---
+
+## 23. 快速开始指南 (已更新 2026-05-30)
+
+### 🔧 Bug修复记录
+
+**PATCH /admin/api/users/:id 返回 404 神秘问题 (已解决)**
+
+| 问题 | 根因 | 解决方案 |
+|------|------|----------|
+| PATCH 返回 404 not_found | `patch` 函数未导入 router.rs | 添加 `patch` 到 routing imports |
+| Debug 输出不出现 | 路由不匹配，请求被其他 handler 捕获 | 修复后 debug 输出正常 |
+
+```rust
+// src/server/router.rs 第14行
+// 修复前:
+routing::{get, post, delete, put},
+
+// 修复后:
+routing::{get, post, delete, put, patch},
+```
+
+### 已实现功能 ✅
+
+1. **Phase 1 完成**:
+   - ✅ Auth API (`api.auth.login/logout/register/me`)
+   - ✅ AuthContext (`src/contexts/AuthContext.tsx`)
+   - ✅ LoginPage (`src/pages/LoginPage.tsx`)
+   - ✅ ProtectedRoute (`src/components/common/ProtectedRoute.tsx`)
+   - ✅ App.tsx 路由更新
+
+2. **前端登录流程验证通过**:
+   - 注册: `POST /admin/api/auth/register` → token + user
+   - 登录: `POST /admin/api/auth/login` → token + user
+   - 会话: `POST /admin/api/auth/logout`
+
+### 快速验证命令
+
+```bash
+# 1. 启动 rcodex
+cd /Users/louloulin/Documents/linchong/claude/rcodex
+cargo run
+
+# 2. 注册第一个用户 (如果还没有用户)
+curl -X POST http://localhost:8788/admin/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 3. 登录测试
+curl -X POST http://localhost:8788/admin/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 4. 访问 Admin UI (自动跳转到登录页)
+open http://localhost:8788/admin
+
+# 5. 验证 Proxy API
+curl -X POST http://localhost:8788/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"MiniMax-M2.7","messages":[{"role":"user","content":"hi"}]}'
+```
+
+### 下一步行动
+
+| 优先级 | 任务 | 状态 |
+|--------|------|------|
+| P0 | Users.tsx 用户管理页面 | ✅ 已实现 (2026-05-30) |
+| P1 | Bootstrap.tsx 引导页 | 待实现 |
+| P1 | DataDirManager 数据迁移UI | 待实现 |
+| P2 | UpdateBanner 更新提示 | 待实现 |

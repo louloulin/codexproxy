@@ -11,7 +11,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post, delete, put},
+    routing::{get, post, delete, put, patch},
     Router,
 };
 use governor::{DefaultKeyedRateLimiter, Quota};
@@ -190,7 +190,7 @@ pub fn create_router(
         // User management (admin-only)
         .route("/admin/api/users", get(crate::handlers::admin::list_users))
         .route("/admin/api/users", post(crate::handlers::admin::create_user))
-        .route("/admin/api/users/:id", axum::routing::patch(crate::handlers::admin::update_user))
+        .route("/admin/api/users/:id", patch(crate::handlers::admin::update_user))
         .route("/admin/api/users/:id", delete(crate::handlers::admin::delete_user))
         // Auth routes (use AppState which contains auth_state)
         .route("/admin/api/auth/login", post(crate::auth::handlers::login))

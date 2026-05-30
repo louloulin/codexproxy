@@ -185,6 +185,7 @@ pub async fn list_users(
     })?;
 
     // Extract admin context
+    eprintln!("DEBUG: About to call extract_admin_context");
     let admin = extract_admin_context(&state, &headers).ok_or_else(|| {
         error_response(StatusCode::UNAUTHORIZED, "unauthorized", "Authentication required")
     })?;
@@ -232,6 +233,7 @@ pub async fn create_user(
     })?;
 
     // Extract admin context
+    eprintln!("DEBUG: About to call extract_admin_context");
     let admin = extract_admin_context(&state, &headers).ok_or_else(|| {
         error_response(StatusCode::UNAUTHORIZED, "unauthorized", "Authentication required")
     })?;
@@ -355,6 +357,7 @@ pub async fn update_user(
     })?;
 
     // Extract admin context
+    eprintln!("DEBUG: About to call extract_admin_context");
     let admin = extract_admin_context(&state, &headers).ok_or_else(|| {
         error_response(StatusCode::UNAUTHORIZED, "unauthorized", "Authentication required")
     })?;
@@ -398,6 +401,7 @@ pub async fn update_user(
     };
 
     // Update user
+    eprintln!("DEBUG update_user CALLED: user_id={}, auth_state ptr={:p}", user_id, auth_state.user_repo);
     let updated = auth_state
         .user_repo
         .update_user(
@@ -416,11 +420,13 @@ pub async fn update_user(
             )
         })?;
 
+    eprintln!("DEBUG update_user: updated={}", updated);
+
     if !updated {
         return Err(error_response(
             StatusCode::NOT_FOUND,
             "not_found",
-            &format!("User with id {} not found", user_id),
+            &format!("User with id {} not found (updated=false)", user_id),
         ));
     }
 
@@ -464,6 +470,7 @@ pub async fn delete_user(
     })?;
 
     // Extract admin context
+    eprintln!("DEBUG: About to call extract_admin_context");
     let admin = extract_admin_context(&state, &headers).ok_or_else(|| {
         error_response(StatusCode::UNAUTHORIZED, "unauthorized", "Authentication required")
     })?;
