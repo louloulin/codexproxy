@@ -53,6 +53,31 @@ export interface ApiResponse<T> {
 }
 
 export const api = {
+  // Data Directory API
+  dataDir: {
+    // GET /admin/api/data-dir/info
+    info: () =>
+      fetchJson<{
+        current: string
+        defaultDir: string
+        editable: boolean
+        source: string
+      }>(`${API_BASE}/data-dir/info`),
+
+    // POST /admin/api/data-dir/preview
+    preview: (targetDir: string) =>
+      fetchJson<{
+        ok: boolean
+        currentDir: string
+        targetDir: string
+        estimatedBytes: number
+        exists: boolean
+      }>(`${API_BASE}/data-dir/preview`, {
+        method: "POST",
+        body: JSON.stringify({ targetDir }),
+      }),
+  },
+
   // Bootstrap API
   bootstrap: {
     // GET /admin/api/bootstrap-status

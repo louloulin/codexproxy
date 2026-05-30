@@ -8,6 +8,7 @@ import { LogsPage } from "@/components/logs/LogsPage"
 import { ModelsPage } from "@/components/models/ModelsPage"
 import { ProvidersPage } from "@/components/providers/ProvidersPage"
 import { UsersPage } from "@/pages/UsersPage"
+import { SettingsPage } from "@/pages/SettingsPage"
 import { Layout } from "@/components/layout/Layout"
 import { ToastProvider } from "@/components/ui/toast"
 import { ErrorBoundary } from "@/components/ui/error-boundary"
@@ -53,6 +54,7 @@ function App() {
                           <Route path="/models" element={<ModelsPage />} />
                           <Route path="/providers" element={<ProvidersPage />} />
                           <Route path="/users" element={<UsersPage />} />
+                          <Route path="/settings" element={<SettingsPage />} />
                         </Routes>
                       </Layout>
                     </ProtectedRoute>

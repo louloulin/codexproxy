@@ -1499,5 +1499,5 @@ curl -X POST http://localhost:8788/v1/chat/completions \
 |--------|------|------|
 | P0 | Users.tsx 用户管理页面 | ✅ 已实现 (2026-05-30) |
 | P1 | Bootstrap.tsx 引导页 | ✅ 已实现 (2026-05-30) |
-| P1 | DataDirManager 数据迁移UI | 待实现 |
+| P1 | DataDirManager 数据迁移UI | ✅ 已实现 (2026-05-30) |
 | P2 | UpdateBanner 更新提示 | 待实现 |

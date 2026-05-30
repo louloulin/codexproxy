@@ -5,7 +5,8 @@ import {
   Server,
   Cpu,
   FileText,
-  User,
+  UserCog,
+  Users,
   Key,
   Zap,
 } from "lucide-react"
@@ -16,7 +17,9 @@ const navItems = [
   { to: "/providers", icon: Server, label: "Providers" },
   { to: "/models", icon: Cpu, label: "Models" },
   { to: "/logs", icon: FileText, label: "Logs" },
-  { to: "/account", icon: User, label: "Account" },
+  { to: "/users", icon: Users, label: "Users" },
+  { to: "/account", icon: UserCog, label: "Account" },
+  { to: "/settings", icon: Settings, label: "Settings" },
 ]
 
 export function Sidebar() {
