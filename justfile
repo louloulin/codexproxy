@@ -1,5 +1,5 @@
 # OpenAI Proxy - Justfile
-# Just command runner for openai-proxy
+# Just command runner for rcodex
 # Run `just --list` to see all available commands
 
 # ============================================================
@@ -10,9 +10,16 @@
 build:
     cargo build
 
+# Build admin SPA (required before embedding)
+build-admin:
+    cd rcodex-admin && npm run build
+
 # Build release binary
 build-release:
     cargo build --release
+
+# Build admin and release binary
+build-all: build-admin build-release
 
 # Run in debug mode
 run:
@@ -22,14 +29,29 @@ run:
 run-release:
     cargo run --release
 
+# Run frontend dev server
+dev-frontend:
+    cd rcodex-admin && npm run dev
+
+# Run both backend and frontend (requires two terminals or background processes)
+dev: build
+    @echo "Starting backend on port 8788..."
+    @echo "Frontend: run 'just dev-frontend' in another terminal"
+    cargo run
+
 # Watch mode (requires cargo-watch)
 watch:
     cargo watch -x check -x test -x run
 
 # Build and run release
 start: build-release
-    @echo "Starting OpenAI Proxy on port 9080..."
-    ./target/release/openai-proxy
+    @echo "Starting rcodex on port 9080..."
+    ./target/release/rcodex
+
+# Stop running server
+stop:
+    pkill -f "rcodex" || true
+    @echo "Server stopped"
 
 # ============================================================
 # Testing
@@ -200,8 +222,8 @@ bump KIND="patch":
 
 # Full release workflow
 release: build-release test clippy
-    @echo "Release binary: target/release/openai-proxy"
-    @echo "Run `./target/release/openai-proxy` to start"
+    @echo "Release binary: target/release/rcodex"
+    @echo "Run `./target/release/rcodex` to start"
 
 # ============================================================
 # Docker (if applicable)
@@ -209,11 +231,11 @@ release: build-release test clippy
 
 # Build Docker image
 docker-build:
-    docker build -t openai-proxy:latest .
+    docker build -t rcodex:latest .
 
 # Run in Docker
 docker-run:
-    docker run -p 9080:9080 -v $(pwd)/config.yaml:/app/config.yaml openai-proxy:latest
+    docker run -p 9080:9080 -v $(pwd)/config.yaml:/app/config.yaml rcodex:latest
 
 # ============================================================
 # Utilities
@@ -242,3 +264,4 @@ check-just:
 
 # Default recipe
 default: build
+

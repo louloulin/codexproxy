@@ -5,6 +5,7 @@ use crate::db::user_repository::UserRepository;
 use crate::db::repository::RequestRepository;
 use crate::handlers::{self, AppState};
 use crate::handlers::admin::AdminState;
+use crate::server::static_files;
 use axum::{
     body::Body,
     extract::State,
@@ -20,7 +21,7 @@ use std::num::NonZeroU32;
 use std::path::Path;
 use std::sync::Arc;
 use tower::ServiceBuilder;
-use tower_http::{cors::{CorsLayer, AllowOrigin, AllowHeaders, AllowMethods, ExposeHeaders}, trace::TraceLayer, services::ServeDir};
+use tower_http::{cors::{CorsLayer, AllowOrigin, AllowHeaders, AllowMethods, ExposeHeaders}, trace::TraceLayer};
 
 /// Rate limiting state wrapper
 pub struct RateLimitState {
@@ -104,8 +105,8 @@ pub fn create_router(
             "/v1/text/chatcompletion_v2",
             post(handlers::minimax_chat_completions),
         )
-        // Admin routes
-        .route("/admin", get(crate::handlers::admin::admin_dashboard))
+        // Admin routes - SPA must be before /admin/*path
+        .route("/admin", axum::routing::get(static_files::serve_spa))
         .route("/admin/api/status", get(crate::handlers::admin::api_status))
         .route("/admin/api/providers", get(crate::handlers::admin::api_providers))
         .route("/admin/api/stats", get(crate::handlers::admin::api_stats))
@@ -215,8 +216,9 @@ pub fn create_router(
         // Data migration
         .route("/admin/api/data-dir", get(crate::handlers::admin::get_data_dir_handler))
         .route("/admin/api/data-dir", put(crate::handlers::admin::set_data_dir_handler))
-        // Static file serving for admin SPA
-        .nest_service("/admin/spa", ServeDir::new("static/admin"))
+        // Static file serving for admin SPA (embedded)
+        .route("/admin/spa/*path", axum::routing::get(static_files::serve_spa))
+        .route("/admin/*path", axum::routing::get(static_files::serve_spa))
         .layer(axum::extract::DefaultBodyLimit::max(
             config.server.body_limit,
         ))

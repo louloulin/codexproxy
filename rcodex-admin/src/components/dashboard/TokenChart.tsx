@@ -40,10 +40,11 @@ function formatTokens(n: number): string {
 function calculateSeriesTotals(series: TokenTimeseriesResponse["series"]) {
   let prompt = 0, completion = 0, cached = 0
   for (const s of series) {
-    for (const p of s.points) {
-      prompt += p.prompt_tokens
-      completion += p.completion_tokens
-      cached += p.cached_tokens
+    const points = s.points || []
+    for (const p of points) {
+      prompt += p.prompt_tokens || 0
+      completion += p.completion_tokens || 0
+      cached += p.cached_tokens || 0
     }
   }
   return { prompt, completion, cached }
@@ -136,8 +137,9 @@ function MultiSeriesChart({ series, width = 600, height = 200, onHover, hoverInd
   const maxValue = useMemo(() => {
     let max = 0
     for (const s of series) {
-      for (const p of s.points) {
-        const total = p.prompt_tokens + p.completion_tokens
+      const points = s.points || []
+      for (const p of points) {
+        const total = (p.prompt_tokens || 0) + (p.completion_tokens || 0)
         if (total > max) max = total
       }
     }
@@ -322,8 +324,8 @@ export function TokenChart({ range, bucket }: { range: TimeRange; bucket?: Times
     return data.series.map(s => ({
       provider_id: s.provider_id,
       model: s.model,
-      points: s.points,
-      total: s.points.reduce((sum, p) => sum + p.prompt_tokens + p.completion_tokens, 0)
+      points: s.points || [],
+      total: (s.points || []).reduce((sum, p) => sum + (p.prompt_tokens || 0) + (p.completion_tokens || 0), 0)
     })).sort((a, b) => b.total - a.total)
   }, [data])
 
@@ -332,14 +334,15 @@ export function TokenChart({ range, bucket }: { range: TimeRange; bucket?: Times
     if (hoverIndex === null || !data?.series) return null
     let prompt = 0, completion = 0, cached = 0
     for (const s of data.series) {
-      const p = s.points[hoverIndex]
+      const points = s.points || []
+      const p = points[hoverIndex]
       if (p) {
-        prompt += p.prompt_tokens
-        completion += p.completion_tokens
-        cached += p.cached_tokens
+        prompt += p.prompt_tokens || 0
+        completion += p.completion_tokens || 0
+        cached += p.cached_tokens || 0
       }
     }
-    return { prompt, completion, cached, timestamp: data.series[0]?.points[hoverIndex]?.ts }
+    return { prompt, completion, cached, timestamp: data.series[0]?.points?.[hoverIndex]?.ts }
   }, [data, hoverIndex])
 
   if (isLoading) {

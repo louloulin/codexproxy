@@ -2,11 +2,23 @@ import type { CodexState, CodexTargetsResponse, ProbeResult, CodexHistoryEntry, 
 
 const API_BASE = "/admin/api"
 
+const TOKEN_KEY = "rcodex_auth_token"
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  // Get token from localStorage if available
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+
   const response = await fetch(url, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...headers,
       ...options?.headers,
     },
   })
@@ -103,25 +115,33 @@ export const api = {
   // Auth API
   auth: {
     // POST /admin/api/auth/login
-    login: (username: string, password: string) =>
-      fetchJson<{
-        ok: boolean
-        data?: {
-          token: string
-          user: {
-            id: number
-            username: string
-            role: string
-            is_admin: boolean
-            created_at: number
-          }
-          expires_at: number
-        }
-        error?: string | null
-      }>(`${API_BASE}/auth/login`, {
+    login: async (username: string, password: string) => {
+      const response = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
-      }),
+      })
+      const data = await response.json()
+
+      // Backend returns direct { token, user } without ok wrapper
+      if (response.ok && data.token && data.user) {
+        return {
+          ok: true,
+          data: {
+            token: data.token,
+            user: {
+              id: data.user.id,
+              username: data.user.username,
+              role: data.user.is_admin ? "admin" : "user",
+              is_admin: data.user.is_admin,
+              created_at: Date.now(),
+            },
+            expires_at: Date.now() + 7 * 24 * 3600 * 1000,
+          },
+        }
+      }
+      return { ok: false, error: data.error || "Login failed" }
+    },
 
     // POST /admin/api/auth/register
     register: (username: string, password: string) =>
@@ -148,19 +168,34 @@ export const api = {
     logout: () =>
       fetchJson<{ ok: boolean }>(`${API_BASE}/auth/logout`, { method: "POST" }),
 
-    // GET /admin/api/auth/me (current user info)
-    me: () =>
-      fetchJson<{
-        ok: boolean
-        data?: {
-          id: number
-          username: string
-          role: string
-          is_admin: boolean
-          created_at: number
+    // GET /admin/api/me (current user info)
+    me: async () => {
+      try {
+        const response = await fetch(`${API_BASE}/me`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(localStorage.getItem(TOKEN_KEY) ? { "Authorization": `Bearer ${localStorage.getItem(TOKEN_KEY)}` } : {})
+          }
+        })
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
         }
-        error?: string | null
-      }>(`${API_BASE}/auth/me`),
+        const data = await response.json()
+        // Backend returns direct user object without ok wrapper
+        return {
+          ok: true,
+          data: {
+            id: data.id,
+            username: data.username,
+            role: data.isAdmin ? "admin" : "user",
+            is_admin: data.isAdmin,
+            created_at: Date.now(),
+          }
+        }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "Failed to get user" }
+      }
+    },
   },
 
   // Users API

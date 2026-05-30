@@ -276,13 +276,18 @@ export function CodexPage() {
   }
 
   if (stateError || !state?.ok) {
+    const errorMsg = state?.error
+      ? typeof state.error === "string"
+        ? state.error
+        : (state.error as { code?: string; message?: string; type?: string }).message || JSON.stringify(state.error)
+      : "Failed to load Codex state"
     return (
       <div className="p-8">
         <Alert variant="destructive">
           <XCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>
-            {state?.error ?? "Failed to load Codex state"}
+            {errorMsg}
           </AlertDescription>
         </Alert>
       </div>
